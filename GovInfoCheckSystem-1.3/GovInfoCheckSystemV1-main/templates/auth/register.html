@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>用户注册 - 政企智能舆情分析报告生成智能体应用系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+    <style>
+        body { background-color: #2d3a4b; color: #fff; }
+        .login-container { width: 380px; margin: 150px auto; padding: 40px; background: #fff; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,.1); color: #333; }
+        .login-header { text-align: center; margin-bottom: 30px; }
+        .login-header h2 { font-size: 24px; font-weight: 500; color: #333; }
+        .login-header p { margin-top: 10px; color: #999; }
+        .layui-input { height: 44px; }
+        .layui-btn { height: 44px; font-size: 16px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h2>用户注册</h2>
+            <p>创建一个新账号</p>
+        </div>
+        <form class="layui-form" method="POST">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="layui-alert" style="color: red; text-align: center; margin-bottom: 10px;">{{ messages[0] }}</div>
+                {% endif %}
+            {% endwith %}
+            <div class="layui-form-item">
+                <div class="layui-input-wrap">
+                    <div class="layui-input-prefix"><i class="layui-icon layui-icon-username"></i></div>
+                    <input type="text" name="username" lay-verify="required" placeholder="用户名" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-wrap">
+                    <div class="layui-input-prefix"><i class="layui-icon layui-icon-password"></i></div>
+                    <input type="password" name="password" lay-verify="required" placeholder="密码" autocomplete="off" class="layui-input" lay-affix="eye">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <div class="layui-input-wrap">
+                    <div class="layui-input-prefix"><i class="layui-icon layui-icon-password"></i></div>
+                    <input type="password" name="confirm_password" lay-verify="required|confirmPass" placeholder="确认密码" autocomplete="off" class="layui-input" lay-affix="eye">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <button class="layui-btn layui-btn-fluid layui-bg-blue" lay-submit>立即注册</button>
+            </div>
+            <div class="layui-form-item" style="text-align: center;">
+                <a href="{{ url_for('auth.login') }}" style="color: #009688;">已有账号？立即登录</a>
+            </div>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+    <script>
+        layui.use(['form'], function(){
+            var form = layui.form;
+            form.verify({
+                confirmPass: function(value){
+                    if(document.querySelector('input[name=password]').value !== value)
+                        return '两次密码输入不一致';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

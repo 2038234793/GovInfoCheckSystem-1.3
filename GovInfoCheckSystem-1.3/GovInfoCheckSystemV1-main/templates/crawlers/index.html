@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="layui-card">
+  <div class="layui-card-header">
+    <span class="layui-breadcrumb">
+      <a href="/">首页</a>
+      <a><cite>爬虫管理</cite></a>
+    </span>
+  </div>
+  <div class="layui-card-body">
+    <div class="layui-form layui-row layui-col-space15" style="padding-bottom: 15px;">
+      <div class="layui-col-md3">
+        <input type="text" id="search-keyword" placeholder="名称或地址关键字" class="layui-input">
+      </div>
+      <div class="layui-col-md2">
+        <button class="layui-btn" id="do-search">查询</button>
+      </div>
+      <div class="layui-col-md7" style="text-align:right;">
+        <button class="layui-btn layui-btn-normal" id="add-btn">新增来源</button>
+        <button class="layui-btn layui-btn-danger" id="batch-delete">批量删除</button>
+      </div>
+    </div>
+    <table id="data-table" lay-filter="data-table"></table>
+  </div>
+</div>
+
+<script type="text/html" id="table-bar">
+  <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+  <a class="layui-btn layui-btn-warm layui-btn-xs" lay-event="test">测试</a>
+  <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+</script>
+
+<div id="edit-modal" style="display:none; padding:20px;">
+  <form class="layui-form" lay-filter="edit-form">
+    <input type="hidden" name="id">
+    <div class="layui-form-item">
+      <label class="layui-form-label">名称</label>
+      <div class="layui-input-block">
+        <input type="text" name="name" required lay-verify="required" placeholder="来源唯一标识" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label">Base URL</label>
+      <div class="layui-input-block">
+        <input type="text" name="base_url" required lay-verify="required" placeholder="例如：https://www.baidu.com/s" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Headers</label>
+      <div class="layui-input-block">
+        <textarea name="headers" placeholder='支持 JSON 或原始文本' class="layui-textarea" rows="6"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Params</label>
+      <div class="layui-input-block">
+        <textarea name="params" placeholder='例如：{"keyword_param":"word","rtt":"1","bsst":"1","cl":"2","tn":"news","rsv_dl":"ns_pc"}' class="layui-textarea" rows="5"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Pagination</label>
+      <div class="layui-input-block">
+        <textarea name="pagination" placeholder='例如：{"param":"pn","start":0,"step":10}' class="layui-textarea" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Selectors</label>
+      <div class="layui-input-block">
+        <textarea name="selectors" placeholder='例如：{"container":".result-op","title":"h3","link":"h3 a","source":".c-color-gray","image":"img.c-img"}' class="layui-textarea" rows="5"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <div class="layui-input-block">
+        <input type="checkbox" name="is_active" title="启用" checked>
+      </div>
+    </div>
+    <div class="layui-form-item" style="text-align:right;">
+      <button class="layui-btn" lay-submit lay-filter="save-edit">保存</button>
+      <button type="button" class="layui-btn layui-btn-primary" id="open-analyze">自动解析</button>
+    </div>
+  </form>
+</div>
+
+<div id="analyze-modal" style="display:none; padding:20px;">
+  <form class="layui-form" lay-filter="analyze-form">
+    <div class="layui-form-item">
+      <label class="layui-form-label">示例URL</label>
+      <div class="layui-input-block">
+        <input type="text" name="url" placeholder="粘贴示例URL" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Headers</label>
+      <div class="layui-input-block">
+        <textarea name="headers" placeholder='粘贴请求头文本或JSON' class="layui-textarea" rows="8"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item" style="text-align:right;">
+      <button class="layui-btn" lay-submit lay-filter="do-analyze">解析并填充</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['table','form','layer'], function(){
+  var table = layui.table, form = layui.form, layer = layui.layer, $ = layui.$;
+  var tableIns = table.render({
+    elem:'#data-table', url:'/crawler_mgmt/api/list', page:true,
+    cols:[[{type:'checkbox', fixed:'left'},
+      {field:'id', title:'ID', width:60, sort:true},
+      {field:'name', title:'名称', width:180},
+      {field:'base_url', title:'Base URL', minWidth:280},
+      {field:'is_active', title:'启用', width:80, templet:function(d){return d.is_active?'<span class="layui-badge layui-bg-green">是</span>':'<span class="layui-badge">否</span>';}},
+      {field:'created_at', title:'创建时间', width:180},
+      {fixed:'right', title:'操作', toolbar:'#table-bar', width:220}
+    ]]
+  });
+  $('#do-search').on('click', function(){
+    tableIns.reload({where:{keyword:$('#search-keyword').val()}, page:{curr:1}});
+  });
+  $('#add-btn').on('click', function(){
+    form.val('edit-form', {id:'', name:'', base_url:'', headers:'', params:'', pagination:'', selectors:'', is_active:true});
+    layer.open({type:1, title:'新增来源', area:['700px','720px'], content:$('#edit-modal')});
+  });
+  $('#batch-delete').on('click', function(){
+    var cs = table.checkStatus('data-table').data; if(cs.length===0){layer.msg('请选择'); return;}
+    var ids = cs.map(function(i){return i.id;});
+    layer.confirm('确认删除选中的 '+cs.length+' 条数据吗？', function(index){
+      $.ajax({url:'/crawler_mgmt/api/delete', type:'POST', contentType:'application/json', data:JSON.stringify({ids:ids}), success:function(res){
+        if(res.code===0){layer.msg('删除成功',{icon:1}); tableIns.reload();} else {layer.msg('删除失败:'+res.msg,{icon:2});}
+      }}); layer.close(index);
+    });
+  });
+  table.on('tool(data-table)', function(obj){
+    var d = obj.data, ev = obj.event;
+    if(ev==='del'){
+      layer.confirm('真的删除行么', function(index){
+        $.ajax({url:'/crawler_mgmt/api/delete', type:'POST', contentType:'application/json', data:JSON.stringify({ids:[d.id]}), success:function(res){
+          if(res.code===0){obj.del(); layer.msg('删除成功',{icon:1});} else {layer.msg('删除失败:'+res.msg,{icon:2});}
+        }}); layer.close(index);
+      });
+    } else if(ev==='edit'){
+      form.val('edit-form', {id:d.id, name:d.name, base_url:d.base_url, headers:d.headers, params:d.params, pagination:d.pagination, selectors:d.selectors, is_active:d.is_active});
+      layer.open({type:1, title:'编辑来源', area:['700px','720px'], content:$('#edit-modal')});
+    } else if(ev==='test'){
+      var cfg = {base_url:d.base_url, headers:tryJson(d.headers), params:tryJson(d.params), pagination:tryJson(d.pagination), selectors:tryJson(d.selectors)};
+      layer.prompt({title:'输入测试关键词，如：成都', formType:0}, function(value, index){
+        layer.close(index);
+        var load = layer.load(1);
+        $.ajax({url:'/crawler_mgmt/api/test', type:'POST', contentType:'application/json', data:JSON.stringify({keyword:value, config:cfg, limit:10, max_pages:1}), success:function(res){
+          layer.close(load);
+          if(res.code===0){
+            var html = '<div style="max-height:420px; overflow:auto; padding:10px;">';
+            (res.data||[]).forEach(function(it){
+              html += '<div style="border-bottom:1px solid #eee; padding:8px 0;">';
+              html += '<div><a href="'+(it.url||'#')+'" target="_blank" class="layui-table-link">'+(it.title||'无标题')+'</a></div>';
+              html += '<div style="color:#999; font-size:12px;">'+(it.source||'未知')+'</div>';
+              html += '</div>';
+            });
+            html += '</div>';
+            layer.open({type:1, title:'测试结果', area:['640px','520px'], content:html});
+          } else {
+            layer.msg('测试失败:'+res.msg,{icon:2});
+          }
+        }, error:function(){ layer.close(load); layer.msg('请求失败',{icon:2}); }});
+      });
+    }
+  });
+  form.on('submit(save-edit)', function(data){
+    var f = data.field;
+    var payload = {id:f.id||undefined, name:f.name, base_url:f.base_url, headers:tryJson(f.headers), params:tryJson(f.params), pagination:tryJson(f.pagination), selectors:tryJson(f.selectors), is_active:!!f.is_active};
+    var url = f.id?'/crawler_mgmt/api/update':'/crawler_mgmt/api/add';
+    $.ajax({url:url, type:'POST', contentType:'application/json', data:JSON.stringify(payload), success:function(res){
+      if(res.code===0){ layer.closeAll('page'); layer.msg('保存成功',{icon:1}); tableIns.reload(); } else { layer.msg('保存失败:'+res.msg,{icon:2}); }
+    }});
+    return false;
+  });
+  $('#open-analyze').on('click', function(){
+    layer.open({type:1, title:'自动解析', area:['700px','520px'], content:$('#analyze-modal')});
+  });
+  form.on('submit(do-analyze)', function(data){
+    var f = data.field; var load = layer.load(1);
+    $.ajax({url:'/crawler_mgmt/api/analyze', type:'POST', contentType:'application/json', data:JSON.stringify({url:f.url, headers:f.headers}), success:function(res){
+      layer.close(load);
+      if(res.code===0){
+        var d = res.data || {};
+        form.val('edit-form', {
+          base_url: d.base_url || '',
+          headers: JSON.stringify(d.headers||{}, null, 2),
+          params: JSON.stringify(d.params||{}, null, 2),
+          pagination: JSON.stringify(d.pagination||{}, null, 2),
+          selectors: JSON.stringify(d.selectors||{}, null, 2)
+        });
+        layer.closeAll('page');
+        layer.msg('已填充', {icon:1});
+      } else {
+        layer.msg(res.msg||'解析失败', {icon:2});
+      }
+    }, error:function(){ layer.close(load); layer.msg('请求失败', {icon:2}); }});
+    return false;
+  });
+  function tryJson(x){
+    if(!x) return {};
+    try{ var o = JSON.parse(x); if(typeof o==='object') return o; }catch(e){}
+    return x;
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="layui-row">
+  <div class="layui-col-md12">
+    <button class="layui-btn">框架已启动</button>
+  </div>
+  <div class="layui-col-md12" style="margin-top:12px;">
+    <div class="layui-panel" style="padding:12px;">欢迎使用基于 Flask + SQLite + Layui 的基础框架</div>
+  </div>
+{% endblock %}
+
+{% block public_content %}
+<div class="layui-row">
+  <div class="layui-col-md12">
+    <div class="layui-panel" style="padding:12px;">
+      欢迎使用基于 Flask + SQLite + Layui 的基础框架。请先登录以使用系统功能。
+    </div>
+    <a class="layui-btn layui-btn-primary" href="{{ url_for('auth.login') }}" style="margin-top:12px;">前往登录</a>
+  </div>
+</div>
+{% endblock %}

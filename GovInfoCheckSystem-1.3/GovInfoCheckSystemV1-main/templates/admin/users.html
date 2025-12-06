@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span class="layui-breadcrumb">
+          <a href="{{ url_for('admin.index') }}">后台首页</a>
+          <a><cite>用户管理</cite></a>
+        </span>
+        <div style="float: right;">
+            <button type="button" class="layui-btn layui-btn-sm" id="add-user-btn">添加用户</button>
+        </div>
+    </div>
+    <div class="layui-card-body">
+        <table class="layui-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>角色</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>
+                        {% if user.role.name == 'Admin' %}
+                        <span class="layui-badge layui-bg-blue">管理员</span>
+                        {% else %}
+                        <span class="layui-badge-rim">普通用户</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="layui-btn layui-btn-xs edit-user-btn" data-id="{{ user.id }}" data-username="{{ user.username }}" data-role="{{ user.role_id }}">编辑</button>
+                        {% if user.id != current_user.id %}
+                        <a href="{{ url_for('admin.delete_user', user_id=user.id) }}" class="layui-btn layui-btn-xs layui-btn-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                        {% else %}
+                        <button class="layui-btn layui-btn-xs layui-btn-disabled">删除</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add/Edit User Modal -->
+<div id="user-modal" style="display: none; padding: 20px;">
+    <form class="layui-form" lay-filter="user-form" action="{{ url_for('admin.add_user') }}" method="POST">
+        <div class="layui-form-item">
+            <label class="layui-form-label">用户名</label>
+            <div class="layui-input-block">
+                <input type="text" name="username" required lay-verify="required" placeholder="请输入用户名" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">密码</label>
+            <div class="layui-input-block">
+                <input type="password" name="password" placeholder="如果不修改请留空" autocomplete="off" class="layui-input">
+                <div class="layui-form-mid layui-word-aux" id="password-hint">新建用户时必填</div>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">角色</label>
+            <div class="layui-input-block">
+                <select name="role_id" lay-verify="required">
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item" style="text-align: right;">
+            <button class="layui-btn" lay-submit>保存</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['layer', 'form', 'jquery'], function(){
+    var layer = layui.layer;
+    var form = layui.form;
+    var $ = layui.$;
+    
+    // Add User
+    $('#add-user-btn').on('click', function(){
+        // Reset form
+        $('input[name="username"]').val('');
+        $('input[name="password"]').val('');
+        $('#password-hint').show();
+        $('form').attr('action', "{{ url_for('admin.add_user') }}");
+        
+        form.render();
+        
+        layer.open({
+            type: 1,
+            title: '添加用户',
+            area: ['500px', '350px'],
+            content: $('#user-modal')
+        });
+    });
+    
+    // Edit User
+    $('.edit-user-btn').on('click', function(){
+        var id = $(this).data('id');
+        var username = $(this).data('username');
+        var roleId = $(this).data('role');
+        
+        $('input[name="username"]').val(username);
+        $('input[name="password"]').val('');
+        $('#password-hint').hide();
+        $('select[name="role_id"]').val(roleId);
+        
+        // Update form action
+        var url = "{{ url_for('admin.edit_user', user_id=0) }}".replace('0', id);
+        $('form').attr('action', url);
+        
+        form.render();
+        
+        layer.open({
+            type: 1,
+            title: '编辑用户',
+            area: ['500px', '350px'],
+            content: $('#user-modal')
+        });
+    });
+});
+</script>
+{% endblock %}

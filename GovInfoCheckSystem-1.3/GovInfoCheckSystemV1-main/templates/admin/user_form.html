@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span class="layui-breadcrumb">
+          <a href="{{ url_for('admin.index') }}">后台首页</a>
+          <a href="{{ url_for('admin.users') }}">用户管理</a>
+          <a><cite>{{ title }}</cite></a>
+        </span>
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" method="POST" style="width: 500px;">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="layui-alert" style="color: red; margin-bottom: 10px;">{{ messages[0] }}</div>
+                {% endif %}
+            {% endwith %}
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">用户名</label>
+                <div class="layui-input-block">
+                    <input type="text" name="username" required lay-verify="required" placeholder="请输入用户名" autocomplete="off" class="layui-input" value="{{ user.username if user else '' }}">
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">密码</label>
+                <div class="layui-input-block">
+                    <input type="password" name="password" {% if not user %}required lay-verify="required"{% endif %} placeholder="{% if user %}留空则不修改{% else %}请输入密码{% endif %}" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">角色</label>
+                <div class="layui-input-block">
+                    <select name="role_id" lay-verify="required">
+                        {% for role in roles %}
+                        <option value="{{ role.id }}" {% if user and user.role_id == role.id %}selected{% endif %}>{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit lay-filter="formDemo">立即提交</button>
+                    <a href="{{ url_for('admin.users') }}" class="layui-btn layui-btn-primary">返回</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+layui.use('form', function(){
+  var form = layui.form;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,250 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    /* 优化表格显示：单行省略，防止错位 */
+    .layui-table-cell {
+        height: 40px !important;
+        line-height: 40px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 0 10px;
+    }
+    
+    /* 修复复选框垂直对齐 */
+    .layui-table-cell .layui-form-checkbox {
+        top: 0px;
+    }
+</style>
+<div class="layui-card">
+  <div class="layui-card-header">
+    <span class="layui-breadcrumb">
+      <a href="/">首页</a>
+      <a><cite>采集规则库</cite></a>
+    </span>
+  </div>
+  <div class="layui-card-body">
+    <!-- Toolbar -->
+    <div class="layui-form layui-row layui-col-space15" style="padding-bottom: 15px;">
+      <div class="layui-col-md12">
+        <button class="layui-btn layui-btn-normal" id="add-btn">
+          <i class="layui-icon layui-icon-add-1"></i> 新增规则
+        </button>
+        <button class="layui-btn layui-btn-danger" id="batch-delete">
+          <i class="layui-icon layui-icon-delete"></i> 批量删除
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <table id="data-table" lay-filter="data-table"></table>
+  </div>
+</div>
+
+<!-- Action Bar Template -->
+<script type="text/html" id="table-bar">
+  <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+  <a class="layui-btn layui-btn-warm layui-btn-xs" lay-event="copy">复制</a>
+  <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+</script>
+
+<!-- Edit/Add Modal Template -->
+<div id="edit-modal" style="display: none; padding: 20px;">
+  <form class="layui-form" lay-filter="edit-form">
+    <input type="hidden" name="id">
+    <div class="layui-form-item">
+      <label class="layui-form-label">站点名称</label>
+      <div class="layui-input-block">
+        <input type="text" name="site_name" required  lay-verify="required" placeholder="例如：百度新闻" autocomplete="off" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label">域名/标识</label>
+      <div class="layui-input-block">
+        <input type="text" name="domain" placeholder="例如：baidu.com" autocomplete="off" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label">标题XPath</label>
+      <div class="layui-input-block">
+        <input type="text" name="title_xpath" placeholder="例如：//h1/text()" autocomplete="off" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item">
+      <label class="layui-form-label">内容XPath</label>
+      <div class="layui-input-block">
+        <input type="text" name="content_xpath" placeholder="例如：//div[@class='content']" autocomplete="off" class="layui-input">
+      </div>
+    </div>
+    <div class="layui-form-item layui-form-text">
+      <label class="layui-form-label">Headers</label>
+      <div class="layui-input-block">
+        <textarea name="headers" placeholder='支持 JSON 格式或从浏览器直接复制的 Request Headers 文本' class="layui-textarea" rows="10"></textarea>
+      </div>
+    </div>
+    <div class="layui-form-item" style="text-align: right;">
+      <button class="layui-btn" lay-submit lay-filter="save-edit">保存</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['table', 'form', 'layer'], function(){
+  var table = layui.table;
+  var form = layui.form;
+  var layer = layui.layer;
+  var $ = layui.$;
+
+  // Render Table
+  var tableIns = table.render({
+    elem: '#data-table',
+    url: '/rules/api/list',
+    page: true,
+    cols: [[
+      {type: 'checkbox', fixed: 'left'},
+      {field: 'id', title: 'ID', width: 60, sort: true},
+      {field: 'site_name', title: '站点名称', width: 150},
+      {field: 'domain', title: '域名/标识', width: 150},
+      {field: 'title_xpath', title: '标题XPath', minWidth: 200},
+      {field: 'content_xpath', title: '内容XPath', minWidth: 200},
+      {field: 'created_at', title: '创建时间', width: 180, sort: true},
+      {fixed: 'right', title:'操作', toolbar: '#table-bar', width: 180}
+    ]]
+  });
+
+  // Add Button
+  $('#add-btn').on('click', function(){
+    form.val('edit-form', {
+      "id": "",
+      "site_name": "",
+      "domain": "",
+      "title_xpath": "",
+      "content_xpath": "",
+      "headers": ""
+    });
+    
+    layer.open({
+      type: 1,
+      title: '新增规则',
+      area: ['600px', '550px'],
+      content: $('#edit-modal')
+    });
+  });
+
+  // Batch Delete
+  $('#batch-delete').on('click', function(){
+    var checkStatus = table.checkStatus('data-table');
+    var data = checkStatus.data;
+    if(data.length === 0){
+      layer.msg('请选择要删除的数据');
+      return;
+    }
+    var ids = data.map(function(item){return item.id;});
+    
+    layer.confirm('确认删除选中的 ' + data.length + ' 条数据吗？', function(index){
+      $.ajax({
+        url: '/rules/api/delete',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ids: ids}),
+        success: function(res){
+          if(res.code === 0){
+            layer.msg('删除成功', {icon: 1});
+            tableIns.reload();
+          } else {
+            layer.msg('删除失败: ' + res.msg, {icon: 2});
+          }
+        }
+      });
+      layer.close(index);
+    });
+  });
+
+  // Tool Events
+  table.on('tool(data-table)', function(obj){
+    var data = obj.data;
+    var layEvent = obj.event;
+
+    if(layEvent === 'del'){
+      layer.confirm('真的删除行么', function(index){
+        $.ajax({
+          url: '/rules/api/delete',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ids: [data.id]}),
+          success: function(res){
+            if(res.code === 0){
+              obj.del();
+              layer.msg('删除成功', {icon: 1});
+            } else {
+              layer.msg('删除失败: ' + res.msg, {icon: 2});
+            }
+          }
+        });
+        layer.close(index);
+      });
+    } else if(layEvent === 'copy'){
+      layer.confirm('确认复制该规则吗？', function(index){
+        $.ajax({
+          url: '/rules/api/copy',
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({id: data.id}),
+          success: function(res){
+            if(res.code === 0){
+              layer.msg('复制成功', {icon: 1});
+              tableIns.reload();
+            } else {
+              layer.msg('复制失败: ' + res.msg, {icon: 2});
+            }
+          }
+        });
+        layer.close(index);
+      });
+    } else if(layEvent === 'edit'){
+      form.val('edit-form', {
+        "id": data.id,
+        "site_name": data.site_name,
+        "domain": data.domain,
+        "title_xpath": data.title_xpath,
+        "content_xpath": data.content_xpath,
+        "headers": data.headers
+      });
+      
+      layer.open({
+        type: 1,
+        title: '编辑规则',
+        area: ['600px', '550px'],
+        content: $('#edit-modal')
+      });
+    }
+  });
+
+  // Save Edit
+  form.on('submit(save-edit)', function(data){
+    var field = data.field;
+    var url = field.id ? '/rules/api/update' : '/rules/api/add';
+    
+    $.ajax({
+      url: url,
+      type: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(field),
+      success: function(res){
+        if(res.code === 0){
+          layer.closeAll('page');
+          layer.msg('保存成功', {icon: 1});
+          tableIns.reload();
+        } else {
+          layer.msg('保存失败: ' + res.msg, {icon: 2});
+        }
+      }
+    });
+    return false;
+  });
+});
+</script>
+{% endblock %}

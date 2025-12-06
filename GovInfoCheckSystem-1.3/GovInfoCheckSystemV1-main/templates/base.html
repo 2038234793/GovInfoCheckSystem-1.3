@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GovInfoCheckSystem</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+</head>
+<body class="layui-layout-body">
+  <div class="layui-layout layui-layout-admin">
+    {% if current_user.is_authenticated %}
+    <div class="layui-header">
+      <div class="layui-logo">{{ config_app_name | default('舆情分析系统') }}</div>
+      <ul class="layui-nav layui-layout-right">
+        <li class="layui-nav-item">
+          <a href="javascript:;">
+            <img src="//t.cn/RCzsdCq" class="layui-nav-img">
+            {{ current_user.username }}
+          </a>
+          <dl class="layui-nav-child">
+            <dd><a href="javascript:;">基本资料</a></dd>
+            <dd><a href="{{ url_for('auth.change_password') }}">修改密码</a></dd>
+          </dl>
+        </li>
+        <li class="layui-nav-item"><a href="{{ url_for('auth.logout') }}">退出</a></li>
+      </ul>
+    </div>
+    
+    <div class="layui-side layui-bg-black">
+      <div class="layui-side-scroll">
+        <ul class="layui-nav layui-nav-tree">
+          <li class="layui-nav-item layui-nav-itemed">
+            <a href="javascript:;">系统菜单</a>
+            <dl class="layui-nav-child">
+              <dd><a href="{{ url_for('main.index') }}">首页</a></dd>
+              <dd><a href="{{ url_for('collect.index') }}">数据采集管理</a></dd>
+              <dd><a href="{{ url_for('warehouse.index') }}">数据仓库管理</a></dd>
+              <dd><a href="{{ url_for('rules.index') }}">采集规则库</a></dd>
+              <dd><a href="{{ url_for('ai_engine.index') }}">AI引擎管理</a></dd>
+              <dd><a href="{{ url_for('ai_analysis.index') }}">AI数据清洗分析</a></dd>
+              <dd><a href="{{ url_for('crawler_mgmt.index') }}">爬虫管理</a></dd>
+              <dd><a href="{{ url_for('dashboard.index') }}">数据大屏</a></dd>
+              <dd><a href="{{ url_for('chatroom.index') }}">在线聊天室</a></dd>
+              {% if current_user.is_admin() %}
+              <dd><a href="{{ url_for('admin.index') }}">后台管理</a></dd>
+              <dd><a href="{{ url_for('admin.users') }}">用户管理</a></dd>
+              <dd><a href="{{ url_for('admin.settings') }}">系统设置</a></dd>
+              {% endif %}
+            </dl>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="layui-body">
+      <div style="padding: 15px;">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="layui-alert" style="margin-bottom: 15px;">
+              {% for message in messages %}
+                <div>{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+    
+    <div class="layui-footer">
+      <!-- 底部固定区域 -->
+      © 政企智能舆情分析报告生成智能体应用系统
+    </div>
+    {% else %}
+      <!-- Not logged in content, usually login page handles full screen, but if any page is public -->
+      <div class="layui-container" style="padding-top:20px;">
+         {% block public_content %}{% endblock %}
+      </div>
+    {% endif %}
+  </div>
+  <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+  <script>
+    layui.use(['element', 'layer', 'util'], function(){
+      var element = layui.element
+      ,layer = layui.layer
+      ,util = layui.util;
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
