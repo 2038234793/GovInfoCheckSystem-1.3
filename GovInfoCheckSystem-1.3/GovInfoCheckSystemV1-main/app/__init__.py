@@ -61,6 +61,10 @@ def create_app():
     from .plugins.chatroom import chatroom_bp
     app.register_blueprint(chatroom_bp)
 
+    # Register Data Dashboard Plugin Blueprint
+    from .plugins.data_dashboard import dashboard_bp as data_dashboard_bp
+    app.register_blueprint(data_dashboard_bp)
+
     with app.app_context():
         from . import models
         # Create tables is handled by migrate, but for dev we can check
