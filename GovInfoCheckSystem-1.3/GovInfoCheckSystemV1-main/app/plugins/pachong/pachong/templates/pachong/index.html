@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        爬虫插件
+        <span class="layui-badge layui-bg-green" id="version-badge">v1.0</span>
+    </div>
+    <div class="layui-card-body">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-col-md3">
+                <div class="layui-card border-card">
+                    <div class="layui-card-header">站点选择</div>
+                    <div class="layui-card-body" style="height: 600px; overflow-y: auto;">
+                        <form class="layui-form" lay-filter="source-form">
+                            <div id="source-list"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="layui-col-md9">
+                <div class="layui-card border-card">
+                    <div class="layui-card-header">执行控制</div>
+                    <div class="layui-card-body">
+                        <form class="layui-form" action="">
+                            <div class="layui-form-item">
+                                <div class="layui-inline">
+                                    <label class="layui-form-label">关键词</label>
+                                    <div class="layui-input-inline" style="width: 300px;">
+                                        <input type="text" name="keyword" required lay-verify="required" placeholder="请输入搜索关键词" autocomplete="off" class="layui-input">
+                                    </div>
+                                </div>
+                                <div class="layui-inline">
+                                    <label class="layui-form-label">采集数量</label>
+                                    <div class="layui-input-inline" style="width: 100px;">
+                                        <input type="number" name="limit" value="30" class="layui-input">
+                                    </div>
+                                </div>
+                                <div class="layui-inline">
+                                    <button class="layui-btn" lay-submit lay-filter="start-crawl">开始爬取</button>
+                                    <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                                </div>
+                            </div>
+                            
+                            <div class="layui-form-item" id="progress-area" style="display: none;">
+                                <label class="layui-form-label">进度</label>
+                                <div class="layui-input-block">
+                                    <div class="layui-progress layui-progress-big" lay-showpercent="true" lay-filter="crawl-progress">
+                                        <div class="layui-progress-bar layui-bg-blue" lay-percent="0%"></div>
+                                    </div>
+                                    <div style="margin-top: 5px; color: #666;" id="status-text">准备就绪...</div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="layui-card border-card" style="margin-top: 15px;">
+                    <div class="layui-card-header">
+                        采集结果
+                        <div style="float: right;">
+                            <button class="layui-btn layui-btn-sm layui-btn-normal" id="save-btn">入库</button>
+                            <button class="layui-btn layui-btn-sm layui-btn-warm" id="export-btn">导出JSON</button>
+                        </div>
+                    </div>
+                    <div class="layui-card-body">
+                        <table id="result-table" lay-filter="result-table"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/html" id="linkTpl">
+    <a href="{{ '{{ d.url }}' }}" target="_blank" class="layui-table-link">{{ '{{ d.title }}' }}</a>
+</script>
+
+<style>
+    .border-card {
+        border: 1px solid #e6e6e6;
+        box-shadow: 0 1px 2px 0 rgba(0,0,0,.05);
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['form', 'table', 'layer', 'element', 'jquery'], function(){
+    var form = layui.form;
+    var table = layui.table;
+    var layer = layui.layer;
+    var element = layui.element;
+    var $ = layui.$;
+    
+    var currentJobId = null;
+    var timer = null;
+    var crawledData = [];
+    
+    // 初始化站点列表
+    $.get('/pachong/api/sources', function(res){
+        if(res.code === 0){
+            var html = '';
+            var categories = res.data.categories;
+            var sources = res.data.sources;
+            
+            // Group sources by category
+            var grouped = {};
+            sources.forEach(function(source){
+                var cat = source.category || '其他';
+                if(!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(source);
+            });
+            
+            for(var cat in grouped){
+                html += '<fieldset class="layui-elem-field layui-field-title" style="margin-top: 10px;"><legend style="font-size: 14px;">' + cat + '</legend></fieldset>';
+                grouped[cat].forEach(function(s){
+                    html += '<input type="checkbox" name="sources" value="' + s.key + '" title="' + s.name + '" lay-skin="primary"><br>';
+                });
+            }
+            
+            $('#source-list').html(html);
+            form.render('checkbox');
+        }
+    });
+    
+    // 初始化表格
+    table.render({
+        elem: '#result-table',
+        data: [],
+        cols: [[
+            {type: 'checkbox'},
+            {field: 'source_name', title: '来源', width: 120, sort: true},
+            {field: 'title', title: '标题', templet: '#linkTpl'},
+            {field: 'time', title: '发布时间', width: 180, sort: true}
+        ]],
+        page: true,
+        limit: 10,
+        height: 500
+    });
+    
+    // 开始爬取
+    form.on('submit(start-crawl)', function(data){
+        var sources = [];
+        $('input[name="sources"]:checked').each(function(){
+            sources.push($(this).val());
+        });
+        
+        if(sources.length === 0){
+            layer.msg('请至少选择一个站点', {icon: 2});
+            return false;
+        }
+        
+        var payload = {
+            keyword: data.field.keyword,
+            limit: data.field.limit,
+            sources: sources
+        };
+        
+        // Start Async Job
+        $('#progress-area').show();
+        element.progress('crawl-progress', '0%');
+        $('#status-text').text('正在初始化...');
+        $('button[lay-filter="start-crawl"]').addClass('layui-btn-disabled').attr('disabled', true);
+        
+        $.ajax({
+            url: '/pachong/api/crawl/async',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function(res){
+                if(res.code === 0){
+                    currentJobId = res.job_id;
+                    startPolling();
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                    resetState();
+                }
+            },
+            error: function(){
+                layer.msg('请求失败', {icon: 2});
+                resetState();
+            }
+        });
+        
+        return false;
+    });
+    
+    function startPolling(){
+        timer = setInterval(function(){
+            $.get('/pachong/api/crawl/status', {job_id: currentJobId}, function(res){
+                if(res.code === 0){
+                    var job = res.data;
+                    element.progress('crawl-progress', job.progress + '%');
+                    $('#status-text').text(job.status_text);
+                    
+                    if(job.state === 'completed' || job.state === 'error'){
+                        clearInterval(timer);
+                        resetState();
+                        
+                        if(job.state === 'completed'){
+                            crawledData = job.items;
+                            table.reload('result-table', {
+                                data: crawledData
+                            });
+                            layer.msg('爬取完成', {icon: 1});
+                        } else {
+                            layer.msg('爬取出错: ' + job.error, {icon: 2});
+                        }
+                    }
+                }
+            });
+        }, 1000);
+    }
+    
+    function resetState(){
+        $('button[lay-filter="start-crawl"]').removeClass('layui-btn-disabled').attr('disabled', false);
+    }
+    
+    // 入库
+    $('#save-btn').on('click', function(){
+        var checkStatus = table.checkStatus('result-table');
+        var data = checkStatus.data;
+        
+        if(data.length === 0){
+            // If none selected, verify if we should save all
+            if(crawledData.length > 0){
+                layer.confirm('未选择特定数据，是否保存所有 ' + crawledData.length + ' 条数据？', function(index){
+                    saveData(crawledData);
+                    layer.close(index);
+                });
+            } else {
+                layer.msg('没有数据可保存');
+            }
+        } else {
+            saveData(data);
+        }
+    });
+    
+    function saveData(items){
+        var keyword = $('input[name="keyword"]').val();
+        var loading = layer.load(1);
+        
+        $.ajax({
+            url: '/pachong/api/store',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                items: items,
+                keyword: keyword
+            }),
+            success: function(res){
+                layer.close(loading);
+                if(res.code === 0){
+                    layer.alert(res.msg, {icon: 1});
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            },
+            error: function(){
+                layer.close(loading);
+                layer.msg('保存失败', {icon: 2});
+            }
+        });
+    }
+    
+    // 导出JSON
+    $('#export-btn').on('click', function(){
+        if(crawledData.length === 0){
+            layer.msg('没有数据可导出');
+            return;
+        }
+        
+        var blob = new Blob([JSON.stringify(crawledData, null, 2)], {type : 'application/json'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'crawl_result_' + new Date().getTime() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+});
+</script>
+{% endblock %}

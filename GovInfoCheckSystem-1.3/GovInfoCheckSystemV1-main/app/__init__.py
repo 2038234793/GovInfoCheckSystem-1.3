@@ -69,6 +69,10 @@ def create_app():
     from .plugins.report_mgmt import report_mgmt_bp
     app.register_blueprint(report_mgmt_bp)
 
+    # Register Pachong Plugin Blueprint
+    from .plugins.pachong.pachong import pachong_bp
+    app.register_blueprint(pachong_bp)
+
     with app.app_context():
         from . import models
         # Create tables is handled by migrate, but for dev we can check
