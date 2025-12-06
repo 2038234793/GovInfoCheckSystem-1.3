@@ -10,7 +10,8 @@ class ChatClient {
             onlineUsersContainer: document.getElementById('online-users-container'),
             onlineCount: document.getElementById('online-count'),
             notification: document.getElementById('notification'),
-            notificationMessage: document.getElementById('notification-message')
+            notificationMessage: document.getElementById('notification-message'),
+            mentionList: document.getElementById('mention-list')
         };
         
         this.initEvents();
@@ -22,13 +23,70 @@ class ChatClient {
         this.elements.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
         });
-        this.elements.aiBtn.addEventListener('click', () => {
-            const input = this.elements.messageInput;
-            if (!input.value.startsWith('@AI ')) {
-                input.value = '@AI ' + input.value;
+        
+        // Input event for mention list
+        this.elements.messageInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            // Check if user typed '@' or if value ends with '@' (e.g. pasted)
+            if (val.endsWith('@')) {
+                this.showMentionList();
+            } else if (!val.includes('@')) {
+                this.hideMentionList();
             }
-            input.focus();
         });
+
+        // Click outside to close mention list
+        document.addEventListener('click', (e) => {
+            if (this.elements.mentionList && !this.elements.mentionList.contains(e.target) && e.target !== this.elements.messageInput) {
+                this.hideMentionList();
+            }
+        });
+
+        // Mention list items click
+        if (this.elements.mentionList) {
+            this.elements.mentionList.querySelectorAll('li').forEach(item => {
+                item.addEventListener('click', () => {
+                    const value = item.getAttribute('data-value');
+                    const input = this.elements.messageInput;
+                    
+                    // Replace last '@' or append
+                    const lastAt = input.value.lastIndexOf('@');
+                    if (lastAt !== -1) {
+                        input.value = input.value.substring(0, lastAt) + value;
+                    } else {
+                        input.value += value;
+                    }
+                    
+                    input.focus();
+                    this.hideMentionList();
+                });
+            });
+        }
+
+        this.elements.aiBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent closing when clicking the button
+            
+            const input = this.elements.messageInput;
+            // Toggle mention list instead of just focusing
+            if (this.elements.mentionList.classList.contains('hidden')) {
+                this.showMentionList();
+                input.focus();
+            } else {
+                this.hideMentionList();
+            }
+        });
+    }
+
+    showMentionList() {
+        if (this.elements.mentionList) {
+            this.elements.mentionList.classList.remove('hidden');
+        }
+    }
+
+    hideMentionList() {
+        if (this.elements.mentionList) {
+            this.elements.mentionList.classList.add('hidden');
+        }
     }
     
     getAvatarHtml(name, bg = '1A3A5F', classes = 'w-8 h-8 rounded-full') {

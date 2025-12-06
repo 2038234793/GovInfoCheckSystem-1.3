@@ -107,6 +107,32 @@
             <!-- Input Area -->
             <div class="bg-card border-t border-gray-800 p-4">
                 <div class="relative">
+                    <!-- Mention List -->
+                    <div id="mention-list" class="hidden absolute bottom-full left-0 mb-2 w-48 bg-card border border-gray-700 rounded-lg shadow-lg overflow-hidden z-50">
+                        <ul class="text-sm text-gray-300">
+                            <li class="px-4 py-2 hover:bg-accent hover:text-white cursor-pointer flex items-center space-x-2 transition-colors" data-value="@AI ">
+                                <i class="fas fa-robot text-purple-500 w-5"></i>
+                                <span>AI 助手</span>
+                            </li>
+                            <li class="px-4 py-2 hover:bg-accent hover:text-white cursor-pointer flex items-center space-x-2 transition-colors" data-value="@音乐 ">
+                                <i class="fas fa-music text-orange-500 w-5"></i>
+                                <span>点歌</span>
+                            </li>
+                            <li class="px-4 py-2 hover:bg-accent hover:text-white cursor-pointer flex items-center space-x-2 transition-colors" data-value="@天气 ">
+                                <i class="fas fa-cloud-sun text-blue-500 w-5"></i>
+                                <span>天气查询</span>
+                            </li>
+                            <li class="px-4 py-2 hover:bg-accent hover:text-white cursor-pointer flex items-center space-x-2 transition-colors" data-value="@电影 ">
+                                <i class="fas fa-film text-pink-500 w-5"></i>
+                                <span>影视推荐</span>
+                            </li>
+                            <li class="px-4 py-2 hover:bg-accent hover:text-white cursor-pointer flex items-center space-x-2 transition-colors" data-value="@AI 报表">
+                                <i class="fas fa-chart-bar text-green-500 w-5"></i>
+                                <span>数据报表</span>
+                            </li>
+                        </ul>
+                    </div>
+
                     <input type="text" id="message-input" data-nickname="{{ nickname }}" placeholder="输入消息..." 
                            class="w-full bg-secondary border border-gray-700 rounded-lg py-3 px-4 pr-24 text-white focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent">
                     
