@@ -75,6 +75,24 @@ function initCharts() {
 
     // Map Chart
     mapChart = echarts.init(document.getElementById('mapContainer'));
+    
+    // Click event for Map
+    mapChart.on('click', function (params) {
+        if (params.name) {
+            // 1. Update AI Keyword Input
+            const keywordInput = document.getElementById('ai-keyword');
+            if (keywordInput) {
+                keywordInput.value = params.name;
+                // Visual cue
+                keywordInput.classList.add('bg-blue-900/50', 'border-blue-400');
+                setTimeout(() => keywordInput.classList.remove('bg-blue-900/50', 'border-blue-400'), 500);
+            }
+            
+            // 2. Refresh Dashboard News/Stats for this region
+            fetchStats(params.name);
+        }
+    });
+
     render2DMap([]);
 }
 
@@ -356,7 +374,8 @@ function loadAIReport() {
     const keywordInput = document.getElementById('ai-keyword');
     const keyword = keywordInput ? keywordInput.value.trim() : '';
     
-    container.innerHTML = '<div class="flex items-center justify-center h-full text-blue-400"><i class="fas fa-spinner fa-spin mr-2"></i> 分析中...</div>';
+    const loadingText = keyword ? '正在全网搜索并生成分析...' : '正在分析最新资讯...';
+    container.innerHTML = `<div class="flex items-center justify-center h-full text-blue-400"><i class="fas fa-spinner fa-spin mr-2"></i> ${loadingText}</div>`;
     btn.disabled = true;
     btn.classList.add('opacity-50', 'cursor-not-allowed');
     btn.classList.remove('animate-pulse'); // Stop pulsing while loading

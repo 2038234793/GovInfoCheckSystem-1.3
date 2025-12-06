@@ -38,14 +38,24 @@ def get_stats():
         pie_data = [{'name': s[0] or '未知', 'value': s[1]} for s in source_stats]
         
         # 3. Date distribution (Bar Chart) - Last 7 days
-        # Using created_at
+        from datetime import datetime, timedelta
+        
+        # Generate last 7 days strings (YYYY-MM-DD)
+        today = datetime.now().date()
+        dates = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(6, -1, -1)]
+        
+        # Query actual data (fetch more to ensure we cover the range if there are gaps)
         date_stats = db.session.query(
             func.date(ArticleDetail.created_at), func.count(ArticleDetail.id)
-        ).group_by(func.date(ArticleDetail.created_at)).order_by(func.date(ArticleDetail.created_at).desc()).limit(7).all()
+        ).group_by(func.date(ArticleDetail.created_at)).order_by(func.date(ArticleDetail.created_at).desc()).limit(20).all()
         
+        # Create lookup dict
+        stats_map = {str(d[0]): d[1] for d in date_stats}
+        
+        # Build result lists ensuring all 7 days are present
         bar_data = {
-            'categories': [str(d[0]) for d in date_stats][::-1],
-            'values': [d[1] for d in date_stats][::-1]
+            'categories': dates,
+            'values': [stats_map.get(d, 0) for d in dates]
         }
         
         # 4. Recent List
@@ -84,7 +94,37 @@ def refresh_news():
     from app import db
     from app.models import CrawlItem, ArticleDetail
     from app.crawler import BaiduCrawler
-    
+    from datetime import datetime, timedelta
+    import re
+
+    def parse_date(date_str):
+        if not date_str: return datetime.now()
+        now = datetime.now()
+        try:
+            if '分钟' in date_str or 'minutes' in date_str:
+                m = re.search(r'(\d+)', date_str)
+                if m: return now - timedelta(minutes=int(m.group(1)))
+            elif '小时' in date_str or 'hours' in date_str:
+                m = re.search(r'(\d+)', date_str)
+                if m: return now - timedelta(hours=int(m.group(1)))
+            elif '昨天' in date_str:
+                return now - timedelta(days=1)
+            elif '前天' in date_str:
+                return now - timedelta(days=2)
+            elif '天' in date_str or 'days' in date_str:
+                m = re.search(r'(\d+)', date_str)
+                if m: return now - timedelta(days=int(m.group(1)))
+            
+            # Try parsing date strings
+            # Regex for YYYY-MM-DD or YYYY年MM月DD日
+            date_match = re.search(r'(\d{4})[-年](\d{1,2})[-月](\d{1,2})', date_str)
+            if date_match:
+                return datetime(int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3)))
+                
+            return now
+        except:
+            return now
+
     try:
         data = request.get_json() or {}
         keyword = data.get('keyword', '').strip() or '四川' # Default to Sichuan if empty
@@ -105,13 +145,15 @@ def refresh_news():
             exists = CrawlItem.query.filter_by(url=url).first()
             if not exists:
                 # Create CrawlItem
+                pub_date = parse_date(item.get('date'))
                 crawl_item = CrawlItem(
                     keyword=keyword,
                     title=item.get('title'),
                     cover=item.get('cover'),
                     url=url,
                     source=item.get('source', 'Baidu News'),
-                    deep_summary=item.get('summary')
+                    deep_summary=item.get('summary'),
+                    created_at=pub_date
                 )
                 db.session.add(crawl_item)
                 db.session.flush() # Get ID
@@ -120,7 +162,8 @@ def refresh_news():
                 detail = ArticleDetail(
                     crawl_item_id=crawl_item.id,
                     title=item.get('title'),
-                    content=item.get('summary') or item.get('title') # Use summary as content for now
+                    content=item.get('summary') or item.get('title'), # Use summary as content for now
+                    created_at=pub_date
                 )
                 db.session.add(detail)
                 new_count += 1
@@ -174,6 +217,59 @@ def ai_report():
             )
             
         items = query.limit(20).all()
+        
+        # If no items found and keyword exists, try to crawl on-demand
+        if not items and keyword:
+            logger.info(f"No local items found for '{keyword}', triggering on-demand crawl...")
+            try:
+                from app.crawler import BaiduCrawler
+                from app.models import CrawlItem
+                from app import db
+                
+                crawler = BaiduCrawler()
+                # Crawl a small batch for the report
+                crawl_results = crawler.crawl(keyword, limit=10, max_pages=1)
+                
+                new_count = 0
+                for item in crawl_results:
+                    url = item.get('url')
+                    if not url: continue
+                    
+                    if not CrawlItem.query.filter_by(url=url).first():
+                        crawl_item = CrawlItem(
+                            keyword=keyword,
+                            title=item.get('title'),
+                            cover=item.get('cover'),
+                            url=url,
+                            source=item.get('source', 'Baidu News'),
+                            deep_summary=item.get('summary')
+                        )
+                        db.session.add(crawl_item)
+                        db.session.flush()
+                        
+                        detail = ArticleDetail(
+                            crawl_item_id=crawl_item.id,
+                            title=item.get('title'),
+                            content=item.get('summary') or item.get('title')
+                        )
+                        db.session.add(detail)
+                        new_count += 1
+                
+                if new_count > 0:
+                    db.session.commit()
+                    logger.info(f"On-demand crawl saved {new_count} items")
+                    
+                    # Re-query after crawl
+                    # We need to recreate the query object to get fresh results
+                    query = ArticleDetail.query.filter(
+                        (ArticleDetail.title.contains(keyword)) | 
+                        (ArticleDetail.content.contains(keyword))
+                    ).order_by(ArticleDetail.created_at.desc())
+                    items = query.limit(20).all()
+                
+            except Exception as e:
+                logger.error(f"On-demand crawl failed: {e}")
+                # Fall through to empty check
         
         if not items:
             msg = f'未找到包含关键词 "{keyword}" 的相关资讯' if keyword else '暂无相关资讯数据'
