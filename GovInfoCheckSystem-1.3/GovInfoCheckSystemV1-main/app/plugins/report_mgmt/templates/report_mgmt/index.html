@@ -22,7 +22,8 @@
 
 <script type="text/html" id="barDemo">
     <a class="layui-btn layui-btn-xs" lay-event="view">查看</a>
-    <a class="layui-btn layui-btn-normal layui-btn-xs" href="/report_mgmt/download/{{ '{{ d.id }}' }}" target="_blank">下载PDF</a>
+    <!-- Use lay-event for download to handle URL generation in JS -->
+    <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="download">下载PDF</a>
     <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
 </script>
 {% endblock %}
@@ -81,6 +82,9 @@ layui.use(['table', 'form', 'layer'], function(){
             });
         } else if(obj.event === 'view'){
             window.location.href = '/report_mgmt/view/' + data.id;
+        } else if(obj.event === 'download'){
+            // Manually trigger download
+            window.open('/report_mgmt/download/' + data.id, '_blank');
         }
     });
 });

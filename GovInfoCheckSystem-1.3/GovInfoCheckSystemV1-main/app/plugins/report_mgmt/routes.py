@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, send_file, make_response
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, send_file, make_response, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models import Report, ArticleDetail, AIEngine, CrawlItem
@@ -8,6 +8,8 @@ import requests
 import markdown
 from xhtml2pdf import pisa
 from io import BytesIO
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 report_mgmt_bp = Blueprint('report_mgmt', __name__, template_folder='templates', url_prefix='/report_mgmt')
 
@@ -167,46 +169,182 @@ def view(id):
 @login_required
 def download(id):
     report = Report.query.get_or_404(id)
-    html_content = markdown.markdown(report.content)
     
-    # Create PDF
+    # Use ReportLab native generation instead of xhtml2pdf to ensure Chinese font support
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+    from reportlab.lib.units import cm
+    import re
+    
+    # Create PDF buffer
     pdf_buffer = BytesIO()
     
-    # Simple HTML template for PDF
-    pdf_html = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            @page {{ size: A4; margin: 2cm; }}
-            body {{ font-family: "Microsoft YaHei", sans-serif; }}
-            h1 {{ text-align: center; color: #333; }}
-            .meta {{ text-align: center; color: #666; margin-bottom: 30px; }}
-            .content {{ line-height: 1.6; }}
-        </style>
-    </head>
-    <body>
-        <h1>{report.title}</h1>
-        <div class="meta">
-            <p>生成时间：{report.created_at.strftime('%Y-%m-%d')}</p>
-            <p>生成人：{report.user.username if report.user else 'Unknown'}</p>
-        </div>
-        <div class="content">
-            {html_content}
-        </div>
-    </body>
-    </html>
-    """
+    # Font handling for Chinese support
+    import os
+    import platform
+    import shutil
     
-    # Need to handle fonts for Chinese characters in xhtml2pdf if needed, 
-    # usually requires registering fonts. For simplicity, we rely on system fonts or basic support.
-    # If Chinese doesn't show, we might need to add font registration code.
-    
-    pisa_status = pisa.CreatePDF(pdf_html, dest=pdf_buffer, encoding='utf-8')
-    
-    if pisa_status.err:
-        return "PDF generation error", 500
+    # Prepare a persistent local font file to avoid Temp permission issues
+    static_font_dir = os.path.join(current_app.static_folder, 'fonts')
+    if not os.path.exists(static_font_dir):
+        os.makedirs(static_font_dir)
         
+    local_font_path = os.path.join(static_font_dir, 'simhei.ttf')
+    font_loaded = False
+
+    # Try to find and copy a Chinese font if not already present
+    if not os.path.exists(local_font_path):
+        system = platform.system()
+        possible_fonts = []
+        if system == "Windows":
+            possible_fonts = [
+                r"C:\Windows\Fonts\simhei.ttf",
+                r"C:\Windows\Fonts\msyh.ttf",
+                r"C:\Windows\Fonts\simsun.ttc"
+            ]
+        elif system == "Linux":
+            possible_fonts = [
+                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"
+            ]
+            
+        for f in possible_fonts:
+            if os.path.exists(f):
+                try:
+                    shutil.copy(f, local_font_path)
+                    break
+                except Exception as e:
+                    print(f"Failed to copy font {f}: {e}")
+                    continue
+
+    # Register the font with ReportLab if file exists
+    if os.path.exists(local_font_path):
+        try:
+            # Register font directly in ReportLab
+            pdfmetrics.registerFont(TTFont('SimHei', local_font_path))
+            
+            # Also register variants
+            from reportlab.lib.fonts import addMapping
+            addMapping('SimHei', 0, 0, 'SimHei')
+            addMapping('SimHei', 0, 1, 'SimHei')
+            addMapping('SimHei', 1, 0, 'SimHei')
+            addMapping('SimHei', 1, 1, 'SimHei')
+            
+            font_loaded = True
+            print(f"Successfully registered font SimHei from {local_font_path}")
+        except Exception as e:
+            print(f"ReportLab font registration failed: {e}")
+
+    # Define Styles
+    styles = getSampleStyleSheet()
+    
+    # Use SimHei if loaded, otherwise fallback to default (which will likely fail for Chinese)
+    font_name = 'SimHei' if font_loaded else 'Helvetica'
+    
+    style_title = ParagraphStyle(
+        name='ChineseTitle',
+        parent=styles['Title'],
+        fontName=font_name,
+        fontSize=24,
+        leading=30,
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+    
+    style_normal = ParagraphStyle(
+        name='ChineseNormal',
+        parent=styles['Normal'],
+        fontName=font_name,
+        fontSize=12,
+        leading=18,
+        alignment=TA_JUSTIFY,
+        wordWrap='CJK', # Crucial for Chinese line breaking
+        spaceAfter=10
+    )
+    
+    style_h1 = ParagraphStyle(
+        name='ChineseH1', 
+        parent=styles['Heading1'], 
+        fontName=font_name, 
+        fontSize=18, 
+        leading=22, 
+        spaceAfter=10,
+        spaceBefore=10
+    )
+    
+    style_h2 = ParagraphStyle(
+        name='ChineseH2', 
+        parent=styles['Heading2'], 
+        fontName=font_name, 
+        fontSize=16, 
+        leading=20, 
+        spaceAfter=10,
+        spaceBefore=10
+    )
+
+    # Build Story
+    story = []
+    
+    # Add Title
+    story.append(Paragraph(report.title, style_title))
+    
+    # Add Meta Info
+    meta_info = f"生成时间：{report.created_at.strftime('%Y-%m-%d')} | 生成人：{report.user.username if report.user else 'Unknown'}"
+    story.append(Paragraph(meta_info, style_normal))
+    story.append(Spacer(1, 1*cm))
+    
+    # Process Markdown Content
+    if report.content:
+        # Simple Markdown parser for ReportLab
+        lines = report.content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Handle headers
+            if line.startswith('# '):
+                text = line[2:]
+                story.append(Paragraph(text, style_h1))
+            elif line.startswith('## '):
+                text = line[3:]
+                story.append(Paragraph(text, style_h2))
+            elif line.startswith('### '):
+                text = line[4:]
+                story.append(Paragraph(text, style_h2)) # Map H3 to H2 style for simplicity
+            
+            # Handle list items
+            elif line.startswith('- ') or line.startswith('* '):
+                text = line[2:]
+                # Bold processing: **text** -> <b>text</b>
+                text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+                story.append(Paragraph(f"• {text}", style_normal))
+                
+            # Handle normal text
+            else:
+                text = line
+                # Bold processing: **text** -> <b>text</b>
+                text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+                story.append(Paragraph(text, style_normal))
+
+    # Build PDF
+    doc = SimpleDocTemplate(
+        pdf_buffer, 
+        pagesize=A4,
+        rightMargin=2*cm, leftMargin=2*cm, 
+        topMargin=2*cm, bottomMargin=2*cm,
+        title=report.title
+    )
+    
+    try:
+        doc.build(story)
+    except Exception as e:
+        print(f"PDF generation failed: {e}")
+        return jsonify({'code': 1, 'msg': f'PDF生成失败: {str(e)}'})
+
     pdf_buffer.seek(0)
     
     from urllib.parse import quote
