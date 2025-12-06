@@ -209,9 +209,14 @@ def download(id):
         
     pdf_buffer.seek(0)
     
+    from urllib.parse import quote
+    
     response = make_response(pdf_buffer.read())
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'attachment; filename={report.title}.pdf'
+    
+    # Encode filename to handle Chinese characters
+    encoded_filename = quote(f'{report.title}.pdf')
+    response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
     
     return response
 
