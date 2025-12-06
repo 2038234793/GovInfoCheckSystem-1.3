@@ -40,8 +40,7 @@
               <dd><a href="{{ url_for('report_mgmt.index') }}">AI报告管理系统</a></dd>
               <dd><a href="{{ url_for('ai_analysis.index') }}">AI数据清洗分析</a></dd>
               <dd><a href="{{ url_for('crawler_mgmt.index') }}">爬虫管理</a></dd>
-              <dd><a href="{{ url_for('dashboard.index') }}">数据大屏</a></dd>
-              <dd><a href="{{ url_for('data_dashboard.index') }}">3D数据大屏(插件)</a></dd>
+              <dd><a href="{{ url_for('data_dashboard.index') }}">数据大屏</a></dd>
               <dd><a href="{{ url_for('chatroom.index') }}">在线聊天室</a></dd>
               {% if current_user.is_admin() %}
               <dd><a href="{{ url_for('admin.index') }}">后台管理</a></dd>

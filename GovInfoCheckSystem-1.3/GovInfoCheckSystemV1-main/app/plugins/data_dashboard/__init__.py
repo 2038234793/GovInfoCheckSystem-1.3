@@ -3,6 +3,7 @@ from app.models import ArticleDetail, AIEngine, CrawlSource
 from sqlalchemy import func
 import requests
 import logging
+import json
 
 # Define Blueprint
 dashboard_bp = Blueprint('data_dashboard', __name__, 
@@ -184,15 +185,94 @@ def refresh_news():
 @dashboard_bp.route('/api/map_data')
 def map_data():
     """
-    Mock map data or use AI to extract locations.
-    For demo, we can return mock data for China provinces.
+    Uses AI to analyze recent articles and return province/city stats for heatmap.
+    Replaces the old mock data with real AI analysis.
     """
-    # In a real scenario, we would have a 'province' field or use AI to extract it.
-    # Here we mock some data for 2D map.
-    provinces = ['北京', '天津', '上海', '重庆', '河北', '河南', '云南', '辽宁', '黑龙江', '湖南', '安徽', '山东', '新疆', '江苏', '浙江', '江西', '湖北', '广西', '甘肃', '山西', '内蒙古', '陕西', '吉林', '福建', '贵州', '广东', '青海', '西藏', '四川', '宁夏', '海南', '台湾', '香港', '澳门']
-    import random
-    data = [{'name': p, 'value': random.randint(10, 500)} for p in provinces]
-    return jsonify(data)
+    try:
+        # 1. Get active AI Engine
+        engine = AIEngine.query.filter_by(is_active=True).first()
+        if not engine:
+            # Fallback to mock data if no engine
+            logger.info("No active AI engine, returning mock map data")
+            provinces = ['北京', '天津', '上海', '重庆', '河北', '河南', '云南', '辽宁', '黑龙江', '湖南', '安徽', '山东', '新疆', '江苏', '浙江', '江西', '湖北', '广西', '甘肃', '山西', '内蒙古', '陕西', '吉林', '福建', '贵州', '广东', '青海', '西藏', '四川', '宁夏', '海南', '台湾', '香港', '澳门']
+            import random
+            data = [{'name': p, 'value': random.randint(10, 500)} for p in provinces]
+            return jsonify(data)
+        
+        # 2. Get recent data for analysis (limit 50 to respect context window)
+        items = ArticleDetail.query.order_by(ArticleDetail.created_at.desc()).limit(50).all()
+        if not items:
+            return jsonify([])
+
+        # 3. Prepare Prompt
+        # Only using titles to save tokens, usually enough for location extraction
+        texts = [f"{i+1}. {item.title}" for i, item in enumerate(items)]
+        content_block = "\n".join(texts)
+        
+        system_prompt = """
+        你是一个数据分析助手。请分析以下新闻标题列表。
+        任务：
+        1. 识别每条新闻涉及的中国省份（如广东、北京、四川等）或城市（如深圳、成都、武汉等）。
+        2. 如果识别到城市，请将其归类到对应的省份（例如：深圳 -> 广东，成都 -> 四川）。
+        3. 统计每个省份出现的新闻数量。
+        4. 为每个省份提取1-2个热词（Keywords）。
+        5. 输出必须是严格的JSON数组格式，不要包含任何Markdown标记或额外文本。
+        
+        JSON格式示例：
+        [
+            {"name": "北京", "value": 5, "keywords": ["政策", "会议"]},
+            {"name": "广东", "value": 3, "keywords": ["经济", "科技"]}
+        ]
+        """
+        
+        # 4. Call AI
+        headers = {
+            "Authorization": f"Bearer {engine.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Adjust API URL if needed
+        api_url = engine.api_url.strip().rstrip('/')
+        if not api_url.endswith('/chat/completions'):
+             api_url += '/chat/completions'
+             
+        payload = {
+            "model": engine.model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content_block}
+            ],
+            "temperature": 0.1,
+            "stream": False
+        }
+        
+        # Timeout 60s
+        resp = requests.post(api_url, json=payload, headers=headers, timeout=60)
+        resp.raise_for_status()
+        
+        result = resp.json()
+        content = result['choices'][0]['message']['content']
+        
+        # Clean content (remove markdown if present)
+        content = content.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+            
+        data = json.loads(content)
+        return jsonify(data)
+        
+    except Exception as e:
+        logger.error(f"AI Analysis Heatmap Error: {e}")
+        # Fallback to mock on error
+        provinces = ['北京', '天津', '上海', '重庆', '河北', '河南', '云南', '辽宁', '黑龙江', '湖南', '安徽', '山东', '新疆', '江苏', '浙江', '江西', '湖北', '广西', '甘肃', '山西', '内蒙古', '陕西', '吉林', '福建', '贵州', '广东', '青海', '西藏', '四川', '宁夏', '海南', '台湾', '香港', '澳门']
+        import random
+        data = [{'name': p, 'value': random.randint(10, 100)} for p in provinces]
+        return jsonify(data)
 
 @dashboard_bp.route('/api/ai_report', methods=['POST'])
 def ai_report():
