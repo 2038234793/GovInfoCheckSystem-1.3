@@ -44,24 +44,60 @@ class PachongPlugin:
     
     def get_available_sources(self) -> List[Dict]:
         """
-        获取所有可用的预设站点
+        获取所有可用的站点 (优先从数据库获取)
         
         Returns:
             list: 站点列表，每项包含 key, name, category
         """
+        try:
+            from app.models import CrawlSource
+            sources = CrawlSource.query.filter_by(is_active=True).all()
+            result = []
+            for s in sources:
+                result.append({
+                    'key': str(s.id), # Use ID as key
+                    'name': s.name,
+                    'category': '全部站点' # Default category
+                })
+            if result:
+                return result
+        except Exception as e:
+            logger.error(f"Error fetching sources from DB: {e}")
+            
+        # Fallback to presets
         from .presets import get_preset_list
         return get_preset_list()
     
     def get_source_config(self, source_key: str) -> Optional[Dict]:
         """
-        获取指定站点的配置
+        获取指定站点的配置 (优先从数据库获取)
         
         Args:
-            source_key: 站点标识
+            source_key: 站点标识 (ID 或 preset key)
             
         Returns:
             dict: 站点配置，不存在则返回 None
         """
+        # Try DB first
+        try:
+            if source_key.isdigit():
+                from app.models import CrawlSource
+                import json
+                source = CrawlSource.query.get(int(source_key))
+                if source:
+                    # Convert DB model to config dict
+                    return {
+                        "name": source.name,
+                        "base_url": source.base_url,
+                        "headers": json.loads(source.headers) if source.headers else {},
+                        "params": json.loads(source.params) if source.params else {},
+                        "pagination": json.loads(source.pagination) if source.pagination else {},
+                        "selectors": json.loads(source.selectors) if source.selectors else {}
+                    }
+        except Exception as e:
+            logger.error(f"Error fetching source config from DB: {e}")
+
+        # Fallback to presets
         from .presets import get_preset
         return get_preset(source_key)
     
@@ -98,7 +134,6 @@ class PachongPlugin:
         Returns:
             list: 爬取结果列表
         """
-        from .presets import get_preset
         from .crawler import PachongCrawler
         
         if not sources:
@@ -112,7 +147,8 @@ class PachongPlugin:
         lock = threading.Lock()
         
         def crawl_source(source_key):
-            config = get_preset(source_key)
+            # Use self.get_source_config to support DB sources
+            config = self.get_source_config(source_key)
             if not config:
                 logger.warning(f"PachongPlugin: source '{source_key}' not found")
                 return
