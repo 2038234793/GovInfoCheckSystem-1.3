@@ -10,13 +10,13 @@
   <div class="layui-card-body">
     <!-- Search Form -->
     <div class="layui-form layui-row layui-col-space15" id="collect-form" style="padding-bottom: 15px; border-bottom: 1px solid #eee;">
-      <div class="layui-col-md3">
+      <div class="layui-col-md2">
         <label class="layui-form-label">关键词</label>
         <div class="layui-input-block">
-          <input type="text" id="keyword" placeholder="请输入关键词" class="layui-input">
+          <input type="text" id="keyword" placeholder="关键词" class="layui-input">
         </div>
       </div>
-      <div class="layui-col-md2">
+      <div class="layui-col-md3">
         <label class="layui-form-label">来源</label>
         <div class="layui-input-block">
           <div id="src" class="xm-select-demo"></div>
@@ -174,13 +174,39 @@ layui.use(['layer', 'element', 'form'], function(){
   sourceSelect = xmSelect.render({
       el: '#src',
       language: 'zn',
+      tips: '请选择来源',
+      model: {
+          label: {
+              type: 'text'
+          }
+      },
       toolbar: {
-          show: true,
-          list: ['ALL', 'CLEAR']
+        show: true,
+        list: [
+            'ALL', 
+            'CLEAR', 
+            {
+                name: '确定',
+                icon: 'layui-icon layui-icon-ok',
+                method: function(data){
+                    return 'close';
+                }
+            }
+        ]
       },
       filterable: true,
       height: '400px',
-      data: []
+      data: [],
+      on: function(data){
+          var length = data.arr.length;
+          var label = document.querySelector('#src .xm-label .label-content');
+          if(label){
+              setTimeout(function(){
+                  label.innerHTML = length > 0 ? '已选择 <span style="color: #1E9FFF; font-weight: bold;">' + length + '</span> 项' : '请选择来源';
+                  label.setAttribute('title', '已选择 ' + length + ' 项');
+              }, 10);
+          }
+      }
   });
   
   // Load sources dynamically
