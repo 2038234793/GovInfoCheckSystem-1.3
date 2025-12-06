@@ -68,6 +68,9 @@
       <!-- Items will be rendered here -->
     </div>
     
+    <!-- Pagination -->
+    <div id="pagination" style="text-align: center; margin-top: 20px;"></div>
+    
     <!-- Empty State -->
     <div id="empty-state" style="text-align:center; padding: 50px 0; color:#ccc;">
       <i class="layui-icon layui-icon-search" style="font-size: 50px;"></i>
@@ -164,11 +167,14 @@ var isAllSelected = false;
 var autoScroll = false;
 var lastRenderCount = 0;
 var sourceSelect; // xm-select instance
+var currentPage = 1;
+var limit = 10; // Items per page
 
-layui.use(['layer', 'element', 'form'], function(){
+layui.use(['layer', 'element', 'form', 'laypage'], function(){
   var layer = layui.layer;
   var element = layui.element;
   var form = layui.form;
+  var laypage = layui.laypage;
   
   // Initialize xm-select
   sourceSelect = xmSelect.render({
@@ -267,53 +273,85 @@ layui.use(['layer', 'element', 'form'], function(){
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('toolbar').style.display = 'block';
         document.getElementById('count-text').innerText = '共采集到 ' + items.length + ' 条数据';
+        
+        // Pagination Logic
+        var start = (currentPage - 1) * limit;
+        var end = start + limit;
+        var pageItems = items.slice(start, end);
+        
+        pageItems.forEach(function(it, idx){
+          var placeholder = "{{ url_for('static', filename='images/nopic.webp') }}";
+          var imgSrc = (it.cover && it.cover.length>0) ? it.cover : placeholder;
+          var summary = it.summary || '暂无摘要...';
+          
+          html += `
+          <div class="layui-col-md3 layui-col-sm6">
+            <div class="layui-card result-card">
+              <div class="card-img-area">
+                <div class="check-overlay">
+                  <input type="checkbox" class="store-check" data-url="${it.url||''}" style="width:18px;height:18px;">
+                </div>
+                <span class="status-badge">${it.source||'未知'}</span>
+                <a href="${it.url||'#'}" target="_blank">
+                  <img src="${imgSrc}" onerror="this.onerror=null;this.src='${placeholder}'">
+                </a>
+              </div>
+              <div class="card-content">
+                <div class="card-title"><a href="${it.url||'#'}" target="_blank" style="color:#333;">${it.title||'无标题'}</a></div>
+                <div class="card-meta">
+                  <button class="layui-btn layui-btn-xs layui-btn-primary store-one" data-url="${it.url||''}">存储</button>
+                </div>
+                <div class="card-desc" title="${summary}">${summary}</div>
+              </div>
+            </div>
+          </div>`;
+        });
+        
+        // Render Pagination
+        laypage.render({
+            elem: 'pagination',
+            count: items.length,
+            limit: limit,
+            curr: currentPage,
+            jump: function(obj, first){
+                if(!first){
+                    currentPage = obj.curr;
+                    renderList();
+                    // Scroll to top of results
+                    document.getElementById('result-list').scrollIntoView({behavior: 'smooth'});
+                }
+            }
+        });
+        
     } else {
         document.getElementById('empty-state').style.display = 'block';
         document.getElementById('toolbar').style.display = 'none';
+        document.getElementById('pagination').innerHTML = '';
     }
 
-    items.forEach(function(it, idx){
-      var placeholder = "{{ url_for('static', filename='images/nopic.webp') }}";
-      var imgSrc = (it.cover && it.cover.length>0) ? it.cover : placeholder;
-      var summary = it.summary || '暂无摘要...';
-      
-      html += `
-      <div class="layui-col-md3 layui-col-sm6">
-        <div class="layui-card result-card">
-          <div class="card-img-area">
-            <div class="check-overlay">
-              <input type="checkbox" class="store-check" data-url="${it.url||''}" style="width:18px;height:18px;">
-            </div>
-            <span class="status-badge">${it.source||'未知'}</span>
-            <a href="${it.url||'#'}" target="_blank">
-              <img src="${imgSrc}" onerror="this.onerror=null;this.src='${placeholder}'">
-            </a>
-          </div>
-          <div class="card-content">
-            <div class="card-title"><a href="${it.url||'#'}" target="_blank" style="color:#333;">${it.title||'无标题'}</a></div>
-            <div class="card-meta">
-              <button class="layui-btn layui-btn-xs layui-btn-primary store-one" data-url="${it.url||''}">存储</button>
-            </div>
-            <div class="card-desc" title="${summary}">${summary}</div>
-          </div>
-        </div>
-      </div>`;
-    });
     document.getElementById('result-list').innerHTML = html;
+    
+    // Auto-scroll logic (only on first load or live update, but careful with pagination)
     if(autoScroll && items.length > 0){
-      if(items.length >= lastRenderCount){
-        lastRenderCount = items.length;
-        var cards = document.querySelectorAll('#result-list .result-card');
-        if(cards.length){
-          cards[cards.length - 1].scrollIntoView({behavior: 'smooth', block: 'end'});
-        } else {
-          window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});
-        }
-      }
+        // With pagination, auto-scroll to bottom might be confusing if user is on page 1
+        // and new items are added to page 5.
+        // So we might disable auto-scroll when pagination is active or just show a notification.
+        // For now, let's keep it simple: if new items arrive, we might want to stay on current page
+        // unless we are on the last page.
+        
+        // If we are on the last page, maybe refresh?
+        // But for now, let's just update the count and let user navigate.
     }
     
     // Re-bind checkbox events if needed to update "Select All" state visually
     // But simple native checkboxes are fine for now.
+    
+    // Restore checkbox state for current page items if "Select All" is active
+    // (This is tricky with pagination + "Select All", simplified for now: only select visible)
+    if(isAllSelected){
+        var checks = document.querySelectorAll('.store-check');
+        checks.forEach(function(c){ c.checked = true; });
+    }
   }
 
   // Polling Function
