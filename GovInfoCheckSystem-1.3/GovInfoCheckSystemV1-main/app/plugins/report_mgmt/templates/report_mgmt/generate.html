@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span class="layui-breadcrumb">
+          <a href="{{ url_for('report_mgmt.index') }}">报告管理</a>
+          <a><cite>生成报告</cite></a>
+        </span>
+    </div>
+    <div class="layui-card-body">
+        <form class="layui-form" lay-filter="generate-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">行业/关键词</label>
+                <div class="layui-input-block">
+                    <input type="text" name="industry" required lay-verify="required" placeholder="请输入行业名称或关键词，如：人工智能、新能源" autocomplete="off" class="layui-input">
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">时间范围</label>
+                <div class="layui-input-inline">
+                    <input type="text" class="layui-input" id="start_date" name="start_date" placeholder="开始日期" required lay-verify="required">
+                </div>
+                <div class="layui-form-mid">-</div>
+                <div class="layui-input-inline">
+                    <input type="text" class="layui-input" id="end_date" name="end_date" placeholder="结束日期" required lay-verify="required">
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">AI引擎</label>
+                <div class="layui-input-block">
+                    <select name="engine_id" lay-verify="required">
+                        <option value="">请选择AI引擎</option>
+                        {% for engine in engines %}
+                        <option value="{{ engine.id }}">{{ engine.provider_name }} - {{ engine.model_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <div class="layui-input-block">
+                    <button class="layui-btn" lay-submit lay-filter="generate">开始生成</button>
+                    <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                </div>
+            </div>
+        </form>
+        
+        <div id="loading-area" style="display: none; text-align: center; margin-top: 50px;">
+            <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop" style="font-size: 50px; color: #1E9FFF;"></i>
+            <p style="margin-top: 20px; color: #666;">AI正在努力分析数据并撰写报告，请耐心等待（约需1-3分钟）...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['form', 'laydate', 'layer', 'jquery'], function(){
+    var form = layui.form;
+    var laydate = layui.laydate;
+    var layer = layui.layer;
+    var $ = layui.$;
+    
+    // Date pickers
+    laydate.render({elem: '#start_date'});
+    laydate.render({elem: '#end_date'});
+    
+    form.on('submit(generate)', function(data){
+        // Show loading
+        $('form').hide();
+        $('#loading-area').show();
+        
+        $.ajax({
+            url: '/report_mgmt/api/generate',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data.field),
+            success: function(res){
+                if(res.code === 0){
+                    layer.msg('报告生成成功', {icon: 1, time: 2000}, function(){
+                        window.location.href = "{{ url_for('report_mgmt.index') }}";
+                    });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                    // Restore form
+                    $('#loading-area').hide();
+                    $('form').show();
+                }
+            },
+            error: function(xhr){
+                layer.msg('请求超时或出错，请稍后重试', {icon: 2});
+                $('#loading-area').hide();
+                $('form').show();
+            }
+        });
+        
+        return false;
+    });
+});
+</script>
+{% endblock %}

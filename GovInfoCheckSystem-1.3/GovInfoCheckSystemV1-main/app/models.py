@@ -169,3 +169,27 @@ class AIEngine(db.Model):
             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             "updated_at": self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else ''
         }
+
+class Report(db.Model):
+    __tablename__ = 'reports'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(256), nullable=False)
+    content = db.Column(db.Text) # HTML or Markdown content
+    industry = db.Column(db.String(64)) # e.g., 科技, 金融, 医疗
+    time_range = db.Column(db.String(64)) # e.g., 2023-10-01 ~ 2023-10-07
+    report_type = db.Column(db.String(32), default='custom') # daily, weekly, custom
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.DateTime, server_default=func.now())
+    
+    user = db.relationship('User')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "industry": self.industry,
+            "time_range": self.time_range,
+            "report_type": self.report_type,
+            "author": self.user.username if self.user else 'Unknown',
+            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }

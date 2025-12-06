@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">
+        <span class="layui-breadcrumb">
+          <a href="{{ url_for('report_mgmt.index') }}">报告管理</a>
+          <a><cite>报告详情</cite></a>
+        </span>
+        <div style="float: right;">
+            <a href="{{ url_for('report_mgmt.download', id=report.id) }}" target="_blank" class="layui-btn layui-btn-normal layui-btn-sm">下载PDF</a>
+        </div>
+    </div>
+    <div class="layui-card-body">
+        <div style="max-width: 900px; margin: 0 auto; padding: 20px; background: #fff;">
+            <h1 style="text-align: center; margin-bottom: 30px; font-size: 24px; font-weight: bold;">{{ report.title }}</h1>
+            
+            <div style="text-align: center; color: #999; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
+                <span style="margin-right: 20px;">生成时间：{{ report.created_at }}</span>
+                <span style="margin-right: 20px;">行业：{{ report.industry }}</span>
+                <span>生成人：{{ report.user.username if report.user else 'Unknown' }}</span>
+            </div>
+            
+            <div class="markdown-body" style="line-height: 1.8; font-size: 16px;">
+                {{ html_content | safe }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/github-dark.min.css') }}">
+{% endblock %}

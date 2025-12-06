@@ -65,6 +65,10 @@ def create_app():
     from .plugins.data_dashboard import dashboard_bp as data_dashboard_bp
     app.register_blueprint(data_dashboard_bp)
 
+    # Register Report Management Plugin Blueprint
+    from .plugins.report_mgmt import report_mgmt_bp
+    app.register_blueprint(report_mgmt_bp)
+
     with app.app_context():
         from . import models
         # Create tables is handled by migrate, but for dev we can check
