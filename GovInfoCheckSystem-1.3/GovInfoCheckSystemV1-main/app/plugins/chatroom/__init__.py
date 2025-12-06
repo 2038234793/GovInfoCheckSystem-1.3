@@ -77,6 +77,73 @@ def handle_message(data):
         chat_history.pop(0)
         
     emit('message', msg, room=room)
+    
+    # Check for @AI command
+    if '@AI' in message or '@ai' in message:
+        # Remove @AI from message
+        clean_msg = message.replace('@AI', '').replace('@ai', '').strip()
+        if clean_msg:
+            # Check if the user is asking for music (e.g., @AI 音乐)
+            if clean_msg == '音乐' or clean_msg == '点歌' or clean_msg == '来首音乐':
+                threading.Thread(target=process_music_request, args=(room,)).start()
+            # Check if the user is asking for weather (e.g., @AI 天气 北京)
+            elif clean_msg.startswith('天气'):
+                city_name = clean_msg.replace('天气', '').strip()
+                if city_name:
+                    threading.Thread(target=process_weather_request, args=(city_name, room)).start()
+                else:
+                    socketio.emit('message', {
+                        'type': 'system',
+                        'content': '请指定城市，例如：@AI 天气 北京',
+                        'time': datetime.now().strftime('%H:%M')
+                    }, room=room, namespace='/chat')
+            # Check if the user is asking for movie (e.g., @AI 电影 URL)
+            elif clean_msg.startswith('电影'):
+                video_url = clean_msg.replace('电影', '').strip()
+                if video_url:
+                    process_movie_request(video_url, room)
+                else:
+                    socketio.emit('message', {
+                        'type': 'system',
+                        'content': '请提供视频链接，例如：@AI 电影 https://example.com/video',
+                        'time': datetime.now().strftime('%H:%M')
+                    }, room=room, namespace='/chat')
+            # Check if user is asking for charts (e.g., @AI 报表)
+            elif '报表' in clean_msg or '统计' in clean_msg or '数据' in clean_msg:
+                app_obj = current_app._get_current_object()
+                threading.Thread(target=process_chart_request, args=(clean_msg, room, app_obj)).start()
+            else:
+                threading.Thread(target=process_ai_response, args=(clean_msg, room)).start()
+    
+    # Check for @音乐 command
+    if message.strip() == '@音乐':
+        threading.Thread(target=process_music_request, args=(room,)).start()
+        
+    # Check for @天气 command
+    if message.strip().startswith('@天气'):
+        city_name = message.replace('@天气', '').strip()
+        if city_name:
+            threading.Thread(target=process_weather_request, args=(city_name, room)).start()
+        else:
+            # Prompt user to enter city
+             socketio.emit('message', {
+                'type': 'system',
+                'content': '请指定城市，例如：@天气 北京',
+                'time': datetime.now().strftime('%H:%M')
+            }, room=room, namespace='/chat')
+
+    # Check for @电影 command
+    if message.strip().startswith('@电影'):
+        video_url = message.replace('@电影', '').strip()
+        if video_url:
+            process_movie_request(video_url, room)
+        else:
+            emit('message', {
+                'type': 'system',
+                'content': '请提供视频链接，例如：@电影 https://example.com/video',
+                'time': datetime.now().strftime('%H:%M')
+            }, room=room)
+            return
 
 @socketio.on('send_private_message', namespace='/chat')
 def handle_private_message(data):
