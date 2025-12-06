@@ -2,6 +2,7 @@ class ChatClient {
     constructor(socket, nickname) {
         this.socket = socket;
         this.nickname = nickname;
+        this.targetUser = null; // Current private chat target
         this.elements = {
             chatMessages: document.getElementById('chat-messages'),
             messageInput: document.getElementById('message-input'),
@@ -11,7 +12,9 @@ class ChatClient {
             onlineCount: document.getElementById('online-count'),
             notification: document.getElementById('notification'),
             notificationMessage: document.getElementById('notification-message'),
-            mentionList: document.getElementById('mention-list')
+            mentionList: document.getElementById('mention-list'),
+            chatTitle: document.getElementById('chat-title'),
+            chatAvatar: document.getElementById('chat-avatar')
         };
         
         this.initEvents();
@@ -23,6 +26,13 @@ class ChatClient {
         this.elements.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
         });
+
+        // Click title to reset to public chat
+        if (this.elements.chatTitle) {
+            this.elements.chatTitle.addEventListener('click', () => {
+                this.setTargetUser(null);
+            });
+        }
         
         // Input event for mention list
         this.elements.messageInput.addEventListener('input', (e) => {
@@ -88,6 +98,25 @@ class ChatClient {
             this.elements.mentionList.classList.add('hidden');
         }
     }
+
+    setTargetUser(user) {
+        if (user === this.nickname) return; // Can't chat with self
+        this.targetUser = user;
+        const input = this.elements.messageInput;
+        
+        if (user) {
+            this.elements.chatTitle.textContent = `与 ${user} 私聊中`;
+            this.elements.chatAvatar.innerHTML = user.charAt(0).toUpperCase();
+            this.elements.chatAvatar.style.backgroundColor = '#E91E63'; 
+            input.placeholder = `发送私信给 ${user}...`;
+            input.focus();
+        } else {
+            this.elements.chatTitle.textContent = '公共聊天室';
+            this.elements.chatAvatar.innerHTML = '群';
+            this.elements.chatAvatar.style.backgroundColor = '#1A3A5F';
+            input.placeholder = '输入消息...';
+        }
+    }
     
     getAvatarHtml(name, bg = '1A3A5F', classes = 'w-8 h-8 rounded-full') {
         const initial = name ? name.charAt(0).toUpperCase() : '?';
@@ -101,6 +130,7 @@ class ChatClient {
         });
         
         this.socket.on('message', (data) => this.addMessage(data));
+        this.socket.on('private_message', (data) => this.addMessage(data));
         
         this.socket.on('update_users', (data) => {
             this.updateUsers(data.users);
@@ -124,10 +154,18 @@ class ChatClient {
         const msg = this.elements.messageInput.value.trim();
         if (!msg) return;
         
-        this.socket.emit('send_message', {
-            nickname: this.nickname,
-            message: msg
-        });
+        if (this.targetUser) {
+            this.socket.emit('send_private_message', {
+                nickname: this.nickname,
+                to: this.targetUser,
+                message: msg
+            });
+        } else {
+            this.socket.emit('send_message', {
+                nickname: this.nickname,
+                message: msg
+            });
+        }
         
         this.elements.messageInput.value = '';
     }
@@ -144,6 +182,41 @@ class ChatClient {
         if (data.type === 'system') {
             div.className = 'flex justify-center';
             div.innerHTML = `<span class="text-xs bg-dark text-muted px-3 py-1 rounded-full">${data.content} (${data.time})</span>`;
+        } else if (data.type === 'private') {
+             const isMe = data.from === this.nickname;
+             
+             div.className = isMe ? 'flex items-end justify-end space-x-3' : 'flex items-end space-x-3';
+             
+             const contentHtml = `
+                <div class="${isMe ? 'bg-pink-600' : 'bg-pink-700'} rounded-t-lg ${isMe ? 'rounded-bl-lg' : 'rounded-br-lg'} p-3 border border-pink-500">
+                    <p class="text-xs text-pink-200 mb-1 font-bold flex items-center"><i class="fas fa-lock mr-1"></i>私聊 ${isMe ? '发给 ' + data.to : '来自 ' + data.from}</p>
+                    <p class="text-sm break-all text-white">${data.content}</p>
+                </div>
+             `;
+             
+             if (isMe) {
+                 div.innerHTML = `
+                    <div class="max-w-[70%]">
+                        <div class="flex justify-end items-center mb-1">
+                            <span class="text-xs text-muted">${data.time}</span>
+                            <span class="text-xs text-pink-500 ml-2">我</span>
+                        </div>
+                        ${contentHtml}
+                    </div>
+                    ${this.getAvatarHtml(this.nickname, 'E91E63')}
+                `;
+             } else {
+                 div.innerHTML = `
+                    ${this.getAvatarHtml(data.from, 'E91E63')}
+                    <div class="max-w-[70%]">
+                        <div class="flex items-center mb-1">
+                            <span class="text-xs text-white mr-2">${data.from}</span>
+                            <span class="text-xs text-muted">${data.time}</span>
+                        </div>
+                        ${contentHtml}
+                    </div>
+                `;
+             }
         } else if (data.type === 'music_card') {
             const cardId = `music-${Date.now()}`;
             div.className = 'flex items-end space-x-3';
@@ -344,15 +417,26 @@ class ChatClient {
     
     updateUsers(users) {
         this.elements.onlineCount.textContent = `${users.length}人在线`;
-        this.elements.onlineUsersContainer.innerHTML = users.map(user => `
-            <div class="flex items-center space-x-3 p-2 hover:bg-card-hover rounded cursor-pointer transition-colors">
+        this.elements.onlineUsersContainer.innerHTML = '';
+        
+        users.forEach(user => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center space-x-3 p-2 hover:bg-card-hover rounded cursor-pointer transition-colors';
+            div.innerHTML = `
                 <div class="relative">
                     ${this.getAvatarHtml(user, '1A3A5F')}
                     <span class="absolute bottom-0 right-0 w-2 h-2 bg-success rounded-full border border-dark"></span>
                 </div>
                 <span class="text-sm text-gray-300">${user}</span>
-            </div>
-        `).join('');
+            `;
+            
+            // Click to private chat
+            div.addEventListener('click', () => {
+                this.setTargetUser(user);
+            });
+            
+            this.elements.onlineUsersContainer.appendChild(div);
+        });
     }
     
     scrollToBottom() {

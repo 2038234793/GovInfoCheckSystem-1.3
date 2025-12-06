@@ -78,6 +78,46 @@ def handle_message(data):
         
     emit('message', msg, room=room)
 
+@socketio.on('send_private_message', namespace='/chat')
+def handle_private_message(data):
+    nickname = data.get('nickname')
+    to_nickname = data.get('to')
+    message = data.get('message')
+    
+    if not message or not to_nickname:
+        return
+
+    # Find recipient SIDs
+    recipient_sids = []
+    for sid, user_info in online_users.items():
+        if user_info['nickname'] == to_nickname:
+            recipient_sids.append(sid)
+            
+    if not recipient_sids:
+        # User not found
+        emit('message', {
+            'type': 'system',
+            'content': f'用户 {to_nickname} 不在线',
+            'time': datetime.now().strftime('%H:%M')
+        })
+        return
+
+    msg = {
+        'type': 'private',
+        'from': nickname,
+        'to': to_nickname,
+        'content': message,
+        'time': datetime.now().strftime('%H:%M')
+    }
+    
+    # Send to sender
+    emit('private_message', msg)
+    
+    # Send to recipient(s)
+    for sid in recipient_sids:
+        if sid != request.sid: # Don't send twice if sender is same (though logic above sends to sender specifically)
+            emit('private_message', msg, room=sid)
+
     # Check for @AI command
     if '@AI' in message or '@ai' in message:
         # Remove @AI from message
