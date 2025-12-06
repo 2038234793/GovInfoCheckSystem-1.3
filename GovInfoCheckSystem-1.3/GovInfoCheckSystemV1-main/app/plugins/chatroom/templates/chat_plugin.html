@@ -66,22 +66,30 @@
             </div>
             
             <nav class="flex-1 overflow-y-auto scrollbar-thin py-4">
-                <ul>
-                    <li class="mb-1">
-                        <a href="{{ url_for('main.index') }}" class="flex items-center justify-center md:justify-start px-4 py-3 text-muted hover:bg-card-hover hover:text-white transition-colors">
-                            <i class="fas fa-home text-lg"></i>
-                            <span class="hidden lg:block ml-3">返回控制台</span>
-                        </a>
-                    </li>
-                </ul>
-                
-                <div class="mt-8 px-4 hidden lg:block">
-                    <h4 class="text-xs uppercase text-muted font-semibold tracking-wider mb-3">在线用户</h4>
-                    <div id="online-users-container" class="space-y-2">
-                        <!-- Dynamic Users -->
+            <ul>
+                <li class="mb-1">
+                    <a href="{{ url_for('main.index') }}" class="flex items-center justify-center md:justify-start px-4 py-3 text-muted hover:bg-card-hover hover:text-white transition-colors">
+                        <i class="fas fa-home text-lg"></i>
+                        <span class="hidden lg:block ml-3">返回控制台</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="mt-8 px-4 hidden lg:block">
+                <h4 class="text-xs uppercase text-muted font-semibold tracking-wider mb-3">聊天室列表</h4>
+                <div class="space-y-2 mb-6">
+                    <div id="public-chat-tab" class="flex items-center space-x-3 p-2 bg-card-hover rounded cursor-pointer border-l-2 border-accent transition-colors">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style="background-color: #1A3A5F;">群</div>
+                        <span class="text-sm text-white font-medium">公共大厅</span>
                     </div>
                 </div>
-            </nav>
+
+                <h4 class="text-xs uppercase text-muted font-semibold tracking-wider mb-3">在线用户</h4>
+                <div id="online-users-container" class="space-y-2">
+                    <!-- Dynamic Users -->
+                </div>
+            </div>
+        </nav>
         </aside>
         
         <!-- Chat Area -->

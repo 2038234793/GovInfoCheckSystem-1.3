@@ -14,7 +14,8 @@ class ChatClient {
             notificationMessage: document.getElementById('notification-message'),
             mentionList: document.getElementById('mention-list'),
             chatTitle: document.getElementById('chat-title'),
-            chatAvatar: document.getElementById('chat-avatar')
+            chatAvatar: document.getElementById('chat-avatar'),
+            publicChatTab: document.getElementById('public-chat-tab')
         };
         
         this.initEvents();
@@ -30,6 +31,13 @@ class ChatClient {
         // Click title to reset to public chat
         if (this.elements.chatTitle) {
             this.elements.chatTitle.addEventListener('click', () => {
+                this.setTargetUser(null);
+            });
+        }
+
+        // Click public chat tab to reset to public chat
+        if (this.elements.publicChatTab) {
+            this.elements.publicChatTab.addEventListener('click', () => {
                 this.setTargetUser(null);
             });
         }
@@ -109,12 +117,41 @@ class ChatClient {
             this.elements.chatAvatar.innerHTML = user.charAt(0).toUpperCase();
             this.elements.chatAvatar.style.backgroundColor = '#E91E63'; 
             input.placeholder = `发送私信给 ${user}...`;
+            
+            // Update UI states
+            if(this.elements.publicChatTab) {
+                this.elements.publicChatTab.classList.remove('border-accent', 'bg-card-hover');
+                this.elements.publicChatTab.classList.add('border-transparent');
+            }
+            
+            // Highlight active user in list
+            const userItems = this.elements.onlineUsersContainer.children;
+            for(let item of userItems) {
+                if(item.dataset.username === user) {
+                    item.classList.add('bg-card-hover', 'border-l-2', 'border-pink-500');
+                } else {
+                    item.classList.remove('bg-card-hover', 'border-l-2', 'border-pink-500');
+                }
+            }
+            
             input.focus();
         } else {
             this.elements.chatTitle.textContent = '公共聊天室';
             this.elements.chatAvatar.innerHTML = '群';
             this.elements.chatAvatar.style.backgroundColor = '#1A3A5F';
             input.placeholder = '输入消息...';
+            
+            // Update UI states
+            if(this.elements.publicChatTab) {
+                this.elements.publicChatTab.classList.add('border-accent', 'bg-card-hover');
+                this.elements.publicChatTab.classList.remove('border-transparent');
+            }
+            
+            // Remove highlight from users
+            const userItems = this.elements.onlineUsersContainer.children;
+            for(let item of userItems) {
+                item.classList.remove('bg-card-hover', 'border-l-2', 'border-pink-500');
+            }
         }
     }
     
@@ -421,7 +458,14 @@ class ChatClient {
         
         users.forEach(user => {
             const div = document.createElement('div');
-            div.className = 'flex items-center space-x-3 p-2 hover:bg-card-hover rounded cursor-pointer transition-colors';
+            div.className = 'flex items-center space-x-3 p-2 rounded cursor-pointer transition-colors border-l-2 border-transparent hover:bg-gray-800';
+            div.dataset.username = user; // Store username for selection
+            
+            // Check if this is the current private chat target
+            if (this.targetUser === user) {
+                div.classList.add('bg-card-hover', 'border-pink-500');
+            }
+            
             div.innerHTML = `
                 <div class="relative">
                     ${this.getAvatarHtml(user, '1A3A5F')}

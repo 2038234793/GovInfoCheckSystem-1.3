@@ -118,6 +118,9 @@ def handle_private_message(data):
         if sid != request.sid: # Don't send twice if sender is same (though logic above sends to sender specifically)
             emit('private_message', msg, room=sid)
 
+    # Use sender's sid as room for command responses in private chat
+    room = request.sid
+
     # Check for @AI command
     if '@AI' in message or '@ai' in message:
         # Remove @AI from message
