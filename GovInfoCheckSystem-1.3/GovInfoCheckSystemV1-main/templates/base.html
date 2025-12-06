@@ -14,7 +14,7 @@
       <ul class="layui-nav layui-layout-right">
         <li class="layui-nav-item">
           <a href="javascript:;">
-            <img src="//t.cn/RCzsdCq" class="layui-nav-img">
+            <img src="{{ url_for('static', filename='images/nopic.webp') }}" class="layui-nav-img">
             {{ current_user.username }}
           </a>
           <dl class="layui-nav-child">
@@ -40,7 +40,6 @@
               <dd><a href="{{ url_for('report_mgmt.index') }}">AI报告管理系统</a></dd>
               <dd><a href="{{ url_for('ai_analysis.index') }}">AI数据清洗分析</a></dd>
               <dd><a href="{{ url_for('crawler_mgmt.index') }}">爬虫管理</a></dd>
-              <dd><a href="{{ url_for('pachong.index') }}">爬虫插件</a></dd>
               <dd><a href="{{ url_for('dashboard.index') }}">数据大屏</a></dd>
               <dd><a href="{{ url_for('data_dashboard.index') }}">3D数据大屏(插件)</a></dd>
               <dd><a href="{{ url_for('chatroom.index') }}">在线聊天室</a></dd>

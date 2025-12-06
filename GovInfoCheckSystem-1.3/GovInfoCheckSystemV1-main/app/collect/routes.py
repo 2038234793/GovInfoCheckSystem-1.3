@@ -2,11 +2,14 @@ import uuid
 import threading
 import time
 import random
+import json
 from flask import render_template, request, jsonify, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models import CrawlItem, CrawlSource
 from app.crawler import BaiduCrawler, XinhuaCrawler, ChinaSoCrawler, DynamicCrawler
+from app.plugins.pachong.pachong.crawler import PachongCrawler
+from app.plugins.pachong.pachong.presets import get_preset_list, get_preset, get_all_presets
 from bs4 import BeautifulSoup
 from . import bp
 
@@ -26,117 +29,94 @@ def admin_required(f):
 def index():
     return render_template('collect/index.html')
 
-def _run_job(job_id, keyword, limit, max_pages, src, app):
+@bp.route('/api/sources')
+@login_required
+def api_sources():
+    """获取所有可用站点（包括爬虫插件的预设）"""
+    # 获取系统原生源
+    sources = []
+    
+    # 获取爬虫插件预设源
+    preset_list = get_preset_list()
+    for preset in preset_list:
+        sources.append({
+            "key": preset['key'],
+            "name": preset['name'],
+            "category": preset['category'],
+            "type": "plugin"
+        })
+        
+    return jsonify({
+        "code": 0,
+        "data": sources
+    })
+
+def _run_job(job_id, keyword, limit, max_pages, sources, app):
     with app.app_context():
-        # Try dynamic source first
-        dynamic = CrawlSource.query.filter_by(name=src, is_active=True).first()
-        if dynamic:
-            import json
-            config = {
-                "base_url": dynamic.base_url,
-                "headers": json.loads(dynamic.headers) if dynamic.headers else {},
-                "params": json.loads(dynamic.params) if dynamic.params else {},
-                "pagination": json.loads(dynamic.pagination) if dynamic.pagination else {},
-                "selectors": json.loads(dynamic.selectors) if dynamic.selectors else {}
-            }
-            crawler = DynamicCrawler(config)
-        else:
-            if src == 'baidu':
-                crawler = BaiduCrawler()
-            elif src == 'xinhua':
-                crawler = XinhuaCrawler()
-            elif src == 'chinaso':
-                crawler = ChinaSoCrawler()
-            else:
-                crawler = XinhuaCrawler()
-    items = []
-    seen = set()
-    job = job_store.get(job_id)
-    if not job:
-        return
+        job = job_store.get(job_id)
+        if not job:
+            return
 
-    try:
-        if src == 'baidu':
-            total_steps = max_pages * 10
-            current_step = 0
-            for page_index in range(max_pages):
-                # Random delay to avoid rate limiting
-                if page_index > 0:
-                    time.sleep(random.uniform(1.5, 3.5))
-                
-                job["status_text"] = f"正在采集第 {page_index + 1}/{max_pages} 页..."
-                pn = page_index * 10
-                params = {
-                    "rtt": "1",
-                    "bsst": "1",
-                    "cl": "2",
-                    "tn": "news",
-                    "rsv_dl": "ns_pc",
-                    "word": keyword,
-                    "pn": pn
-                }
-                import requests
+        try:
+            all_results = []
+            import concurrent.futures
+            
+            def crawl_one_source(source_key):
                 try:
-                    # Use session for better connection pooling
-                    with requests.Session() as session:
-                        resp = session.get(crawler.base_url, headers=crawler.headers, params=params, timeout=15)
-                        if resp.status_code != 200:
-                            print(f"Status code {resp.status_code} for page {page_index}")
-                            continue
-                        soup = BeautifulSoup(resp.text, 'html.parser')
-                        page_items = crawler._parse(soup)
+                    preset = get_preset(source_key)
+                    if not preset:
+                        print(f"Preset not found: {source_key}")
+                        return []
+                    
+                    crawler = PachongCrawler(preset)
+                    
+                    # Callback for progress update (simplified)
+                    # Since we are in threads, updating job directly might be race-condition prone
+                    # But for simple status text it's okay-ish or use lock
+                    job["status_text"] = f"正在采集: {preset.get('name', source_key)}"
+                    
+                    return crawler.crawl(
+                        keyword=keyword,
+                        limit=limit,
+                        max_pages=max_pages
+                    )
                 except Exception as e:
-                    print(f"Error fetching page {page_index}: {e}")
-                    page_items = []
-                
-                if not page_items:
-                    # If no items found, maybe end or blocked
-                    print(f"No items found on page {page_index}")
-                
-                for it in page_items:
-                    key = it.get("url") or (it.get("title", "") + it.get("source", ""))
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    items.append(it)
-                    current_step += 1
-                    job["items"] = items
-                    job["progress"] = min(99, int((current_step / total_steps) * 100))
-                    if len(items) >= limit:
-                        break
-                if len(items) >= limit:
-                    break
-        else:
-            # Xinhua or others
-            job["status_text"] = "正在获取列表..."
-            page_items = crawler.crawl(keyword, limit=limit, max_pages=1)
-            total_steps = len(page_items) if page_items else 1
-            current_step = 0
-            for it in page_items:
-                key = it.get("url") or it.get("title", "")
-                if key in seen:
-                    continue
-                seen.add(key)
-                if keyword:
-                    try:
-                        if keyword not in it.get("title", ""):
-                            continue
-                    except Exception:
-                        pass
-                items.append(it)
-                current_step += 1
-                job["items"] = items
-                job["progress"] = min(99, int((current_step / max(1, limit)) * 100))
-                if len(items) >= limit:
-                    break
+                    print(f"Error crawling {source_key}: {e}")
+                    return []
 
-        job["progress"] = 100
-        job["state"] = "completed"
-        job["status_text"] = "采集完成"
-    except Exception as e:
-        job["state"] = "error"
-        job["error"] = str(e)
-        job["status_text"] = f"出错: {str(e)}"
+            # Use ThreadPool for parallel crawling
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_source = {executor.submit(crawl_one_source, s): s for s in sources}
+                for future in concurrent.futures.as_completed(future_to_source):
+                    res = future.result()
+                    if res:
+                        all_results.extend(res)
+                        # Update progress roughly
+                        current = job.get("progress", 0)
+                        step = 90 // len(sources)
+                        job["progress"] = min(90, current + step)
+            
+            # Deduplicate globally
+            seen = set()
+            unique_results = []
+            for item in all_results:
+                k = item.get("url") or item.get("title")
+                if k and k not in seen:
+                    seen.add(k)
+                    # Ensure source_name is set
+                    if not item.get("source_name") and item.get("source"):
+                         item["source_name"] = item["source"]
+                    unique_results.append(item)
+            
+            job["items"] = unique_results
+            job["progress"] = 100
+            job["state"] = "completed"
+            job["status_text"] = f"采集完成，共 {len(unique_results)} 条"
+            
+        except Exception as e:
+            job["state"] = "error"
+            job["error"] = str(e)
+            job["status_text"] = f"出错: {str(e)}"
 
 @bp.route('/api/start', methods=['POST'])
 @login_required
@@ -144,15 +124,32 @@ def api_start():
     data = request.get_json(force=True) or {}
     keyword = str(data.get('q', '')).strip()
     limit = int(data.get('limit', 30))
-    max_pages = int(data.get('max_pages', 5))
-    src = (data.get('src') or 'baidu').lower()
-    if src == 'baidu' and not keyword:
+    max_pages = int(data.get('max_pages', 3))
+    
+    # sources 可以是列表
+    sources = data.get('src')
+    if isinstance(sources, str):
+        sources = [sources]
+    if not sources:
+        sources = ['baidu_news'] # 默认
+        
+    if not keyword:
         return jsonify({"error": "keyword required"}), 400
+        
     job_id = uuid.uuid4().hex
-    job_store[job_id] = {"state": "running", "progress": 0, "items": [], "src": src, "keyword": keyword, "status_text": "正在初始化..."}
+    job_store[job_id] = {
+        "state": "running", 
+        "progress": 0, 
+        "items": [], 
+        "sources": sources, 
+        "keyword": keyword, 
+        "status_text": "正在初始化..."
+    }
+    
     app_obj = current_app._get_current_object()
-    t = threading.Thread(target=_run_job, args=(job_id, keyword, limit, max_pages, src, app_obj), daemon=True)
+    t = threading.Thread(target=_run_job, args=(job_id, keyword, limit, max_pages, sources, app_obj), daemon=True)
     t.start()
+    
     return jsonify({"job_id": job_id})
 
 @bp.route('/api/status')
@@ -176,37 +173,42 @@ def api_store():
     items = data.get('items') or []
     saved = 0
     updated = 0
+    keyword = data.get('keyword', '')
+    
     for it in items:
         url = it.get('url') or ''
-        if not url:
+        title = it.get('title') or ''
+        
+        if not title:
             continue
         
         # Check existing
-        existing = CrawlItem.query.filter_by(url=url).first()
+        existing = None
+        if url:
+            existing = CrawlItem.query.filter_by(url=url).first()
+        if not existing and title:
+            existing = CrawlItem.query.filter_by(title=title, keyword=keyword).first()
         
         if existing:
-            # Update
-            existing.keyword = it.get('keyword') or data.get('keyword') or existing.keyword
-            existing.title = it.get('title') or existing.title
-            existing.cover = it.get('cover') or existing.cover
-            existing.source = it.get('source') or existing.source
-            existing.deep_crawled = bool(it.get('deep')) or existing.deep_crawled
-            existing.deep_cover = it.get('deep_cover') or it.get('cover') or existing.deep_cover
-            existing.deep_summary = it.get('deep_summary') or existing.deep_summary
             updated += 1
         else:
             # Insert
             m = CrawlItem(
-                keyword=it.get('keyword') or data.get('keyword') or '',
-                title=it.get('title') or '',
-                cover=it.get('cover') or '',
+                keyword=keyword,
+                title=title,
+                cover=it.get('cover', ''),
                 url=url,
-                source=it.get('source') or '',
-                deep_crawled=bool(it.get('deep')),
-                deep_cover=it.get('deep_cover') or it.get('cover') or '',
-                deep_summary=it.get('deep_summary') or ''
+                source=it.get('source_name') or it.get('source', ''),
+                deep_crawled=False,
+                deep_cover='',
+                deep_summary=''
             )
             db.session.add(m)
             saved += 1
-    db.session.commit()
-    return jsonify({"saved": saved, "updated": updated})
+            
+    try:
+        db.session.commit()
+        return jsonify({"saved": saved, "updated": updated})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

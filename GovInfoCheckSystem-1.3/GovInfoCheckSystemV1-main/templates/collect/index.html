@@ -19,11 +19,7 @@
       <div class="layui-col-md2">
         <label class="layui-form-label">来源</label>
         <div class="layui-input-block">
-          <select id="src">
-            <option value="baidu">百度新闻</option>
-            <option value="xinhua">新华网</option>
-            <option value="chinaso">中国搜索</option>
-          </select>
+          <div id="src" class="xm-select-demo"></div>
         </div>
       </div>
       <div class="layui-col-md2">
@@ -160,17 +156,83 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/xm-select.js') }}"></script>
 <script>
 var jobId = null;
 var items = [];
 var isAllSelected = false;
 var autoScroll = false;
 var lastRenderCount = 0;
+var sourceSelect; // xm-select instance
 
 layui.use(['layer', 'element', 'form'], function(){
   var layer = layui.layer;
   var element = layui.element;
   var form = layui.form;
+  
+  // Initialize xm-select
+  sourceSelect = xmSelect.render({
+      el: '#src',
+      language: 'zn',
+      toolbar: {
+          show: true,
+          list: ['ALL', 'CLEAR']
+      },
+      filterable: true,
+      height: '400px',
+      data: []
+  });
+  
+  // Load sources dynamically
+  console.log('Fetching sources...');
+  fetch('/collect/api/sources')
+    .then(r => {
+        if (!r.ok) {
+            throw new Error('Network response was not ok: ' + r.status);
+        }
+        return r.json();
+    })
+    .then(res => {
+        console.log('Sources response:', res);
+        if(res.code === 0) {
+            var data = [];
+            var grouped = {};
+            
+            if (!res.data || res.data.length === 0) {
+                console.warn('No sources returned');
+                layer.msg('未获取到数据源', {icon: 3});
+                return;
+            }
+
+            // Group by category
+            res.data.forEach(function(s){
+                var cat = s.category || '其他';
+                if(!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(s);
+            });
+            
+            // Transform for xm-select
+            for(var cat in grouped){
+                var children = grouped[cat].map(s => ({name: s.name, value: s.key}));
+                data.push({name: cat, children: children});
+            }
+            
+            // Update xm-select data
+            sourceSelect.update({
+                data: data,
+                autoRow: true
+            });
+            console.log('xm-select updated with', data.length, 'categories');
+        } else {
+            console.error('API Error:', res);
+            layer.msg('获取来源失败: ' + (res.msg || '未知错误'), {icon: 2});
+        }
+    })
+    .catch(e => {
+        console.error('Fetch error:', e);
+        layer.msg('获取来源网络错误: ' + e.message, {icon: 2});
+        document.querySelector('#src').innerHTML = '<option value="">加载失败</option>';
+    });
 
   // Render List Function
   window.renderList = function(){
@@ -266,13 +328,20 @@ layui.use(['layer', 'element', 'form'], function(){
 
   // Start Button
   document.getElementById('start-btn').addEventListener('click', function(){
-    var q = document.getElementById('keyword').value;
+    var keyword = document.getElementById('keyword').value;
     var limit = parseInt(document.getElementById('limit').value||'30');
     var pages = parseInt(document.getElementById('pages').value||'5');
-    var src = document.getElementById('src').value;
     
-    if((src === 'baidu' || src === 'chinaso') && !q) {
-        layer.msg('百度采集必须输入关键词', {icon: 5, anim: 6});
+    // Get selected sources from xm-select
+    var selectedSources = sourceSelect.getValue('value');
+    
+    if(!keyword) {
+        layer.msg('请输入关键词', {icon: 3});
+        return;
+    }
+    
+    if(!selectedSources || selectedSources.length === 0) {
+        layer.msg('请选择数据来源', {icon: 3});
         return;
     }
 
@@ -287,14 +356,19 @@ layui.use(['layer', 'element', 'form'], function(){
     document.getElementById('progress-area').scrollIntoView({behavior: 'smooth'});
 
     fetch('/collect/api/start', {
-        method:'POST', 
-        headers:{'Content-Type':'application/json'}, 
-        body: JSON.stringify({q:q, limit:limit, max_pages:pages, src:src})
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({
+            q: keyword, 
+            limit: limit, 
+            max_pages: pages, 
+            src: selectedSources
+        })
     })
     .then(r => r.json())
     .then(res => {
         if(res.error) {
-            layer.msg(res.error, {icon: 2});
+            layer.msg('错误: ' + res.error, {icon: 2});
             document.getElementById('status-text').innerText = '初始化失败：' + res.error;
             element.progress('demo', '0%');
             document.getElementById('progress-percent').innerText = '0%';
